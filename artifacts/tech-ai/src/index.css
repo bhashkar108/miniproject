@@ -869,6 +869,11 @@
 .offline-doc-card b { max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:10px; }
 .offline-doc-card small { color:hsl(var(--muted-foreground));font-size:8px;line-height:1.5; }
 .browser-preview { overflow:hidden;border:1px solid hsl(var(--border));border-radius:8px;background:hsl(var(--card)); }
+.portal-embed-blocked { min-height:300px;height:min(65vh,680px);padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:1px solid hsl(var(--border));border-radius:9px;background:hsl(var(--card));text-align:center; }
+.portal-embed-icon { width:42px;height:42px;display:grid;place-items:center;border-radius:12px;color:#216c56;background:#e0f0e8; }
+.portal-embed-blocked h3 { margin:0;color:hsl(var(--foreground));font-size:17px; }
+.portal-embed-blocked p,.portal-embed-blocked small { max-width:460px;margin:0;color:hsl(var(--muted-foreground));font-size:10px;line-height:1.6; }
+.portal-embed-blocked .button { margin:4px 0; }
 .browser-chrome { min-height:31px;padding:0 8px;display:flex;align-items:center;gap:5px;border-bottom:1px solid hsl(var(--border));background:hsl(var(--muted)); }
 .browser-chrome>span { width:6px;height:6px;border-radius:50%;background:#91a099; }
 .browser-chrome small { min-width:0;margin-left:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:hsl(var(--muted-foreground));font:8px 'IBM Plex Mono',monospace; }

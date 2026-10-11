@@ -35,6 +35,16 @@ type QuizWithSource = QuizAnalysis & { sourceFile?: File; sourceUrl: string };
 type Recognition = { lang:string; continuous:boolean; interimResults:boolean; onresult:((event:any)=>void)|null; onend:(()=>void)|null; onerror:(()=>void)|null; start:()=>void; stop:()=>void };
 type RecognitionConstructor = new () => Recognition;
 type InstallPromptEvent = Event & { prompt:()=>Promise<void>; userChoice:Promise<{outcome:string}> };
+function normalizePublicFormUrl(rawUrl:string) {
+  const parsed=new URL(rawUrl.trim());
+  if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error('Invalid public form URL.');
+  if(parsed.hostname.toLowerCase()==='scholarship.gov.in')parsed.hostname='scholarships.gov.in';
+  return parsed.href;
+}
+function isScholarshipPortalUrl(rawUrl:string) {
+  try{const host=new URL(rawUrl).hostname.toLowerCase();return host==='scholarships.gov.in'||host.endsWith('.scholarships.gov.in')||host==='scholarship.gov.in';}
+  catch{return false;}
+}
 const uiTranslations: Record<Exclude<UiLanguage,'English'>,Record<string,string>> = {
   Hindi: {
     'Workspace':'कार्य क्षेत्र','AI Teacher':'AI शिक्षक','Form assistant':'फ़ॉर्म सहायक','Smart Doc':'स्मार्ट दस्तावेज़','Equation graph':'समीकरण ग्राफ़','Auto Quiz':'ऑटो क्विज़','My profile':'मेरी प्रोफ़ाइल',
@@ -439,7 +449,7 @@ function AppContent() {
   const openFormWebsite = (requestedUrl=formUrl) => {
     const rawUrl=requestedUrl.trim();if(!rawUrl){setMessage('Paste a public form link first.');return;}
     let url:string;
-    try{const parsed=new URL(rawUrl);if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error();url=parsed.href;}
+    try{url=normalizePublicFormUrl(rawUrl);}
     catch{setMessage('Enter a valid website address starting with https:// or http://.');return;}
     if(formPreviewUrl.startsWith('blob:'))URL.revokeObjectURL(formPreviewUrl);
     const nextHistory=formHistory.slice(0,formHistoryIndex+1);
@@ -448,13 +458,13 @@ function AppContent() {
   };
   const openFormWebsiteInNewTab = (requestedUrl=formUrl) => {
     const rawUrl=requestedUrl.trim();if(!rawUrl){setMessage('Paste a public form link first.');return;}
-    try{const parsed=new URL(rawUrl);if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error();window.open(parsed.href,'_blank','noopener,noreferrer');}
+    try{window.open(normalizePublicFormUrl(rawUrl),'_blank','noopener,noreferrer');}
     catch{setMessage('Enter a valid website address starting with https:// or http://.');}
   };
   const openFormWebsiteAndPreview = (requestedUrl=formUrl) => {
     const rawUrl=requestedUrl.trim();if(!rawUrl){setMessage('Paste a public form link first.');return;}
     let url:string;
-    try{const parsed=new URL(rawUrl);if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error();url=parsed.href;}
+    try{url=normalizePublicFormUrl(rawUrl);}
     catch{setMessage('Enter a valid website address starting with https:// or http://.');return;}
     openFormWebsite(url);
     window.open(url,'_blank','noopener,noreferrer');
@@ -804,7 +814,7 @@ function AppContent() {
               <div className="panel-heading split-heading"><div><span className="eyebrow">{t('2. REVIEW YOUR ANSWERS')}</span><h2>{form?.title||formFile?.name||t('Live form view')}</h2><p>{form?.fileName||(formSource==='url'?'Actual website preview · AI analysis is separate':t('Choose a file or open a public form URL to preview it here.'))}</p></div>{form&&<button className="button button-subtle button-small" onClick={autoFillForm} data-testid="button-autofill"><Zap size={14}/>{t('Fill from profile')}</button>}</div>
               {formPreviewUrl?<div className="form-preview-workspace">
                 <div className="form-preview-toolbar"><span className="eyebrow">{formSource==='url'?'LIVE WEBSITE VIEW':'ORIGINAL FILE PREVIEW'}</span>{formSource==='url'&&<span>Real page · embedding depends on the website</span>}</div>
-                {formSource==='url'?<div className="browser-preview">
+                 {formSource==='url'?(isScholarshipPortalUrl(formPreviewUrl)?<ScholarshipPortalFallback url={formPreviewUrl}/>:<div className="browser-preview">
                   <div className="browser-chrome form-browser-toolbar">
                     <button type="button" className="icon-button" aria-label="Back in opened page history" title="Back" disabled={formHistoryIndex<=0} onClick={()=>moveFormHistory(-1)}><ArrowLeft size={15}/></button>
                     <button type="button" className="icon-button" aria-label="Forward in opened page history" title="Forward" disabled={formHistoryIndex<0||formHistoryIndex>=formHistory.length-1} onClick={()=>moveFormHistory(1)}><ArrowRight size={15}/></button>
@@ -815,7 +825,7 @@ function AppContent() {
                   </div>
                   <p className="form-embed-note">This frame attempts to show the actual website. If it is blank or blocked, the site prevents embedding—use Open in New Tab. Back/Forward track addresses opened here; internal browser history and cross-origin form controls are restricted by the browser. AI reads public page HTML separately and cannot inspect or fill those controls.</p>
                   <iframe key={`${formPreviewUrl}-${formFrameVersion}`} src={formPreviewUrl} title="Actual public form website" sandbox="allow-forms allow-scripts" referrerPolicy="no-referrer"/>
-                </div>:<div className="phone-document-preview">
+                 </div>):<div className="phone-document-preview">
                   {formFile?.type==='application/pdf'?<iframe src={formPreviewUrl} title="Uploaded form PDF preview"/>:
                     formFile?.type.startsWith('image/')?<img src={formPreviewUrl} alt={`Original uploaded form: ${formFile.name}`}/>:
                     formFile&&(formFile.type.startsWith('text/')||/\.(txt|md)$/i.test(formFile.name))?<pre className="form-text-preview">{formTextPreview||'Loading the original text…'}</pre>:
@@ -934,6 +944,16 @@ function AuthPage({registerMode,name,setName,email,setEmail,password,setPassword
 function PageHeading({eyebrow,title,subtitle}:{eyebrow:string;title:string;subtitle:string}) {return <div className="page-heading"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{subtitle}</p></div>}
 function InlineLoading({label}:{label:string}){return <div className="inline-loading"><span className="skeleton skeleton-line"/><span>{label}</span></div>}
 function EmptyState({icon,title,body}:{icon:ReactNode;title:string;body:string}){return <div className="empty-state"><span className="empty-icon">{icon}</span><h3>{title}</h3><p>{body}</p></div>}
+function ScholarshipPortalFallback({url}:{url:string}) {
+  return <section className="portal-embed-blocked" aria-labelledby="portal-embed-title">
+    <span className="portal-embed-icon"><ShieldCheck size={22}/></span>
+    <span className="eyebrow">NATIONAL SCHOLARSHIP PORTAL</span>
+    <h3 id="portal-embed-title">Open the official portal separately</h3>
+    <p>The portal blocks being shown inside another website. Open it directly so its official sign-in and form controls work normally.</p>
+    <a className="button button-primary" href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15}/>Open scholarships.gov.in</a>
+    <small>Return here afterward to review the AI answer sheet. The portal itself is never submitted by this assistant.</small>
+  </section>;
+}
 function LessonOutput({lesson,language,rate,onRateChange}:{lesson:LessonResponse;language:string;rate:number;onRateChange:(value:number)=>void}) {
   const [speaking,setSpeaking]=useState(false);
   const [activeRange,setActiveRange]=useState<{start:number;end:number}|null>(null);
