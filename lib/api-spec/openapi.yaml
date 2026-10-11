@@ -3,13 +3,27 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Tech AI student workspace API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Student account sessions
+  - name: profile
+    description: Reusable student profile
+  - name: teacher
+    description: AI study assistance
+  - name: forms
+    description: Dynamic uploaded form analysis and review
+  - name: quiz
+    description: Uploaded quiz analysis and practice attempts
+  - name: equations
+    description: Equation text recognition from uploaded documents
+  - name: progress
+    description: Study progress and dashboard summaries
 paths:
   /healthz:
     get:
@@ -24,6 +38,356 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/session:
+    get:
+      operationId: getCurrentSession
+      tags: [auth]
+      summary: Get the current signed-in student
+      responses:
+        "200":
+          description: Current student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "401":
+          description: Not signed in
+  /auth/register:
+    post:
+      operationId: registerStudent
+      tags: [auth]
+      summary: Create a student account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "409":
+          description: Email is already registered
+  /auth/login:
+    post:
+      operationId: loginStudent
+      tags: [auth]
+      summary: Sign in a student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Student signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionUser"
+        "401":
+          description: Invalid email or password
+  /auth/logout:
+    post:
+      operationId: logoutStudent
+      tags: [auth]
+      summary: End the current student session
+      responses:
+        "200":
+          description: Session ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+  /profile:
+    get:
+      operationId: getStudentProfile
+      tags: [profile]
+      summary: Get the current student's profile
+      responses:
+        "200":
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+    put:
+      operationId: updateStudentProfile
+      tags: [profile]
+      summary: Update the current student's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentProfileInput"
+      responses:
+        "200":
+          description: Updated student profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProfile"
+  /teacher/explain:
+    post:
+      operationId: explainStudyMaterial
+      tags: [teacher]
+      summary: Explain study material using Gemini
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonRequest"
+      responses:
+        "200":
+          description: AI lesson response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonResponse"
+  /teacher/uploads:
+    post:
+      operationId: uploadStudyMaterial
+      tags: [teacher]
+      summary: Extract text from study material
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/StudyUploadInput"
+      responses:
+        "200":
+          description: Extracted study material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyMaterial"
+  /forms/analyze:
+    post:
+      operationId: analyzeUploadedForm
+      tags: [forms]
+      summary: Analyze any uploaded PDF or image form
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/FormUploadInput"
+      responses:
+        "200":
+          description: Dynamically detected fields and profile matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormAnalysis"
+  /forms/analyze-url:
+    post:
+      operationId: analyzeFormUrl
+      tags: [forms]
+      summary: Analyze a publicly accessible form page
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FormUrlInput"
+      responses:
+        "200":
+          description: Detected form fields and profile matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormAnalysis"
+  /forms/fill:
+    post:
+      operationId: reviewFilledForm
+      tags: [forms]
+      summary: Validate field values and prepare a reviewable form copy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FilledFormInput"
+      responses:
+        "200":
+          description: Form values ready for review or completion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FilledFormResult"
+  /equations/recognize:
+    post:
+      operationId: recognizeEquationFromImage
+      tags: [equations]
+      summary: Extract equations from an uploaded image or PDF
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/EquationRecognizeInput"
+      responses:
+        "200":
+          description: Extracted equation strings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquationRecognition"
+  /quiz/analyze:
+    post:
+      operationId: analyzeUploadedQuiz
+      tags: [quiz]
+      summary: Analyze a complete uploaded quiz or quiz document
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/QuizUploadInput"
+      responses:
+        "200":
+          description: Full quiz question analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAnalysis"
+  /quiz/import-url:
+    post:
+      operationId: importQuizFromUrl
+      tags: [quiz]
+      summary: Import a publicly accessible quiz page
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizUrlInput"
+      responses:
+        "200":
+          description: Extracted quiz questions from the public page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAnalysis"
+  /quiz/chat:
+    post:
+      operationId: chatAboutQuiz
+      tags: [quiz]
+      summary: Discuss the uploaded quiz with the AI tutor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizChatInput"
+      responses:
+        "200":
+          description: Tutor response grounded in the uploaded quiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizChatResponse"
+  /quiz/solve:
+    post:
+      operationId: solveCurrentQuizQuestion
+      tags: [quiz]
+      summary: Explain an answer for the current practice question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizSolveInput"
+      responses:
+        "200":
+          description: Suggested answer and explanation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizSolution"
+  /quiz/submit:
+    post:
+      operationId: submitQuizPracticeAttempt
+      tags: [quiz]
+      summary: Save a completed practice attempt with a randomized target score
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizSubmitInput"
+      responses:
+        "201":
+          description: Saved practice attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAttempt"
+  /quiz/attempts:
+    get:
+      operationId: listQuizAttempts
+      tags: [quiz]
+      summary: List the current student's quiz attempts
+      responses:
+        "200":
+          description: Quiz practice history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuizAttempt"
+  /progress:
+    get:
+      operationId: listProgress
+      tags: [progress]
+      summary: List recent learning activity
+      responses:
+        "200":
+          description: Learning activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProgressRecord"
+    post:
+      operationId: createProgress
+      tags: [progress]
+      summary: Record a study activity or completed learning session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressInput"
+      responses:
+        "201":
+          description: Saved learning activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressRecord"
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [progress]
+      summary: Get study totals and recent activity
+      responses:
+        "200":
+          description: Dashboard totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +397,416 @@ components:
           type: string
       required:
         - status
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+    SessionUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+      required: [id, name, email]
+    RegisterInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+      required: [name, email, password]
+    LoginInput:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+      required: [email, password]
+    StudentProfile:
+      type: object
+      properties:
+        name: { type: string }
+        roll: { type: string }
+        father: { type: string }
+        mother: { type: string }
+        village: { type: string }
+        district: { type: string }
+        college: { type: string }
+        section: { type: string }
+        branch: { type: string }
+        course: { type: string }
+        subject: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        dateOfBirth: { type: string }
+        gender: { type: string }
+        address: { type: string }
+        state: { type: string }
+        postalCode: { type: string }
+        country: { type: string }
+        nationality: { type: string }
+        guardianName: { type: string }
+        guardianRelationship: { type: string }
+        guardianPhone: { type: string }
+        admissionNumber: { type: string }
+        semester: { type: string }
+        academicYear: { type: string }
+        profilePhoto: { type: string, maxLength: 350000 }
+        updatedAt: { type: string, format: date-time }
+      required:
+        - name
+        - roll
+        - father
+        - mother
+        - village
+        - district
+        - college
+        - section
+        - branch
+        - course
+        - subject
+        - email
+        - phone
+        - dateOfBirth
+        - gender
+        - address
+        - state
+        - postalCode
+        - country
+        - nationality
+        - guardianName
+        - guardianRelationship
+        - guardianPhone
+        - admissionNumber
+        - semester
+        - academicYear
+        - profilePhoto
+        - updatedAt
+    StudentProfileInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 120 }
+        roll: { type: string, maxLength: 100 }
+        father: { type: string, maxLength: 120 }
+        mother: { type: string, maxLength: 120 }
+        village: { type: string, maxLength: 255 }
+        district: { type: string, maxLength: 120 }
+        college: { type: string, maxLength: 255 }
+        section: { type: string, maxLength: 100 }
+        branch: { type: string, maxLength: 120 }
+        course: { type: string, maxLength: 120 }
+        subject: { type: string, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 255 }
+        phone: { type: string, maxLength: 30 }
+        dateOfBirth: { type: string, maxLength: 20 }
+        gender: { type: string, maxLength: 50 }
+        address: { type: string, maxLength: 500 }
+        state: { type: string, maxLength: 120 }
+        postalCode: { type: string, maxLength: 24 }
+        country: { type: string, maxLength: 120 }
+        nationality: { type: string, maxLength: 120 }
+        guardianName: { type: string, maxLength: 120 }
+        guardianRelationship: { type: string, maxLength: 80 }
+        guardianPhone: { type: string, maxLength: 30 }
+        admissionNumber: { type: string, maxLength: 100 }
+        semester: { type: string, maxLength: 80 }
+        academicYear: { type: string, maxLength: 80 }
+        profilePhoto:
+          type: string
+          maxLength: 350000
+          pattern: "^$|^data:image/jpeg;base64,[A-Za-z0-9+/]+={0,2}$"
+      required:
+        - name
+        - roll
+        - father
+        - mother
+        - village
+        - district
+        - college
+        - section
+        - branch
+        - course
+        - subject
+        - email
+        - phone
+        - dateOfBirth
+        - gender
+        - address
+        - state
+        - postalCode
+        - country
+        - nationality
+        - guardianName
+        - guardianRelationship
+        - guardianPhone
+        - admissionNumber
+        - semester
+        - academicYear
+        - profilePhoto
+    LessonRequest:
+      type: object
+      properties:
+        content: { type: string, minLength: 1, maxLength: 60000 }
+        question: { type: string, maxLength: 4000 }
+        language: { type: string, minLength: 2, maxLength: 80 }
+      required: [content, language]
+    LessonResponse:
+      type: object
+      properties:
+        title: { type: string }
+        explanation: { type: string }
+        keyPoints:
+          type: array
+          items: { type: string }
+        followUpQuestions:
+          type: array
+          items: { type: string }
+      required: [title, explanation, keyPoints, followUpQuestions]
+    StudyUploadInput:
+      type: object
+      properties:
+        file: { type: string, format: binary }
+      required: [file]
+    StudyMaterial:
+      type: object
+      properties:
+        fileName: { type: string }
+        mimeType: { type: string }
+        extractedText: { type: string }
+      required: [fileName, mimeType, extractedText]
+    FormUploadInput:
+      type: object
+      properties:
+        file: { type: string, format: binary }
+      required: [file]
+    FormUrlInput:
+      type: object
+      properties:
+        url: { type: string, format: uri, maxLength: 2048 }
+      required: [url]
+    DetectedFormField:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        type:
+          type: string
+          enum: [text, email, date, number, phone, address, checkbox, select, textarea]
+        required: { type: boolean }
+        instruction: { type: string }
+        expectedFormat: { type: ["string", "null"] }
+        profileKey: { type: ["string", "null"] }
+        value: { type: string }
+        matched: { type: boolean }
+        manualOnly: { type: boolean }
+      required: [id, label, type, required, instruction, expectedFormat, profileKey, value, matched, manualOnly]
+    FormAnalysis:
+      type: object
+      properties:
+        formId: { type: string }
+        fileName: { type: string }
+        title: { type: string }
+        mimeType: { type: string }
+        fields:
+          type: array
+          items: { $ref: "#/components/schemas/DetectedFormField" }
+        missingFields:
+          type: array
+          items: { type: string }
+        detectedCount: { type: integer }
+      required: [formId, fileName, title, mimeType, fields, missingFields, detectedCount]
+    FormValue:
+      type: object
+      properties:
+        fieldId: { type: string }
+        value: { type: string }
+      required: [fieldId, value]
+    FilledFormInput:
+      type: object
+      properties:
+        formId: { type: string, minLength: 1 }
+        language: { type: string, enum: [English, Hindi, Hinglish, Bengali, Tamil, Telugu, Marathi, Gujarati, Punjabi, Urdu, Nepali, Spanish] }
+        values:
+          type: array
+          items: { $ref: "#/components/schemas/FormValue" }
+      required: [formId, values]
+    FormFollowUpQuestion:
+      type: object
+      properties:
+        fieldId: { type: string }
+        label: { type: string }
+        question: { type: string }
+      required: [fieldId, label, question]
+    FilledFormResult:
+      type: object
+      properties:
+        completedCount: { type: integer }
+        requiredMissingCount: { type: integer }
+        readyForReview: { type: boolean }
+        message: { type: string }
+        missingQuestions:
+          type: array
+          items: { $ref: "#/components/schemas/FormFollowUpQuestion" }
+      required: [completedCount, requiredMissingCount, readyForReview, message, missingQuestions]
+    EquationRecognizeInput:
+      type: object
+      properties:
+        file: { type: string, format: binary }
+      required: [file]
+    EquationRecognition:
+      type: object
+      properties:
+        equations:
+          type: array
+          items: { type: string }
+      required: [equations]
+    QuizUploadInput:
+      type: object
+      properties:
+        file: { type: string, format: binary }
+      required: [file]
+    QuizUrlInput:
+      type: object
+      properties:
+        url: { type: string, format: uri, maxLength: 2048 }
+      required: [url]
+    QuizChatInput:
+      type: object
+      properties:
+        quizId: { type: string, minLength: 1, maxLength: 80 }
+        question: { type: string, minLength: 1, maxLength: 4000 }
+      required: [quizId, question]
+    QuizChatResponse:
+      type: object
+      properties:
+        answer: { type: string }
+      required: [answer]
+    QuizQuestion:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: integer }
+        question: { type: string }
+        options:
+          type: array
+          items: { type: string }
+        questionType: { type: string }
+        correctAnswerIndex: { type: ["integer", "null"] }
+        explanation: { type: string }
+        topic: { type: string }
+      required: [id, number, question, options, questionType, correctAnswerIndex, explanation, topic]
+    QuizAnalysis:
+      type: object
+      properties:
+        quizId: { type: string }
+        fileName: { type: string }
+        subject: { type: string }
+        totalQuestions: { type: integer }
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/QuizQuestion" }
+      required: [quizId, fileName, subject, totalQuestions, questions]
+    QuizSolveInput:
+      type: object
+      properties:
+        quizId: { type: string }
+        questionIndex: { type: integer, minimum: 0 }
+      required: [quizId, questionIndex]
+    QuizSolution:
+      type: object
+      properties:
+        questionIndex: { type: integer }
+        selectedIndex: { type: integer }
+        isCorrect: { type: boolean }
+        explanation: { type: string }
+      required: [questionIndex, selectedIndex, isCorrect, explanation]
+    QuizSubmitInput:
+      type: object
+      properties:
+        quizId: { type: string }
+        desiredCorrect: { type: integer, minimum: 0 }
+        timeLimitSeconds: { type: integer, minimum: 1, maximum: 7200 }
+        timeSpentSeconds: { type: integer, minimum: 0 }
+        mode: { type: string, enum: [practice, target_score] }
+        answers:
+          type: array
+          items: { $ref: "#/components/schemas/QuizAnswer" }
+      required: [quizId, desiredCorrect, timeLimitSeconds, timeSpentSeconds]
+    QuizAnswer:
+      type: object
+      properties:
+        questionIndex: { type: integer, minimum: 0 }
+        selectedIndex: { type: integer, minimum: 0 }
+      required: [questionIndex, selectedIndex]
+    QuizOutcome:
+      type: object
+      properties:
+        questionIndex: { type: integer }
+        selectedIndex: { type: integer }
+        isCorrect: { type: boolean }
+      required: [questionIndex, selectedIndex, isCorrect]
+    QuizAttempt:
+      type: object
+      properties:
+        id: { type: integer }
+        quizName: { type: string }
+        subject: { type: string }
+        score: { type: integer }
+        totalQuestions: { type: integer }
+        desiredCorrect: { type: integer }
+        timeLimitSeconds: { type: integer }
+        timeSpentSeconds: { type: integer }
+        outcomes:
+          type: array
+          items: { $ref: "#/components/schemas/QuizOutcome" }
+        createdAt: { type: string, format: date-time }
+      required: [id, quizName, subject, score, totalQuestions, desiredCorrect, timeLimitSeconds, timeSpentSeconds, outcomes, createdAt]
+    ProgressInput:
+      type: object
+      properties:
+        kind: { type: string, enum: [lesson, document, form, quiz, equation] }
+        title: { type: string, minLength: 1, maxLength: 255 }
+        details: { type: string, maxLength: 2000 }
+        minutes: { type: integer, minimum: 0, maximum: 1440 }
+      required: [kind, title, details, minutes]
+    ProgressRecord:
+      type: object
+      properties:
+        id: { type: integer }
+        kind: { type: string }
+        title: { type: string }
+        details: { type: string }
+        minutes: { type: integer }
+        createdAt: { type: string, format: date-time }
+      required: [id, kind, title, details, minutes, createdAt]
+    DashboardSummary:
+      type: object
+      properties:
+        sessions: { type: integer }
+        quizzes: { type: integer }
+        averageScore: { type: number }
+        studyMinutes: { type: integer }
+        recentActivity:
+          type: array
+          items: { $ref: "#/components/schemas/ProgressRecord" }
+      required: [sessions, quizzes, averageScore, studyMinutes, recentActivity]
 

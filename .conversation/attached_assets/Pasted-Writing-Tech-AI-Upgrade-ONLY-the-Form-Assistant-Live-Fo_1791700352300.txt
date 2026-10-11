@@ -1,0 +1,45 @@
+Writing
+Tech AI: Upgrade ONLY the Form Assistant Live Form View
+Carefully inspect my existing Tech AI project and make changes ONLY inside the Form Assistant section. Do not modify any other section, feature, page, backend workflow, or shared component unless absolutely necessary for this specific feature.
+Main Requirement
+I want the Live Form View inside Form Assistant to display the actual form or website that I provide, as closely as possible to how it appears in a normal web browser.
+The user must be able to provide a form in either of these ways:
+1. Upload a form or document
+Upload a PDF, JPG, JPEG, PNG, WEBP, or another format already supported by the project.
+Allow the user to select files from their phone gallery, device storage, or files downloaded from WhatsApp and other apps.
+Support the normal file picker on both mobile and desktop.
+After selecting a file, immediately show its actual contents in the existing Live Form View.
+Display PDFs in a PDF viewer and images in an image viewer, preserving their original appearance and proportions.
+Do not replace the uploaded document with a fake form, blank template, extracted text, or AI-generated replica.
+2. Enter or paste a website URL
+Add or improve the URL input within Form Assistant.
+Allow the user to paste a scholarship, college admission, registration, application, or other form URL.
+Provide a clear Open Website button.
+When clicked, load the actual website inside the existing Live Form View, with the address bar at the top and the real website displayed below it, just like an embedded browser.
+Keep the website's original layout, styling, fields, buttons, images, and page content.
+Allow scrolling, link navigation, and interaction with supported form controls.
+Include Back, Forward, and Reload controls wherever technically supported.
+Do not merely analyze the URL and display the analysis results instead of the actual website.
+Live Form View Behaviour
+The same Live Form View must dynamically display whichever supported input the user selects: an uploaded document or a website opened from a URL.
+When the user switches between a file and a URL, update the preview correctly without breaking the Form Assistant.
+Keep the browser/document preview and AI form analysis separate. Existing field detection, profile-based autofill, missing-information questions, answer editing, and answer-sheet features must continue to work.
+Important Website Restrictions
+Some websites prevent embedding through browser security headers. Do not bypass these restrictions or show a fake successful preview.
+If a website blocks embedding, display a clear message and provide an Open in New Tab option. Preserve the entered URL so the user can continue easily.
+Do not claim that a website is displayed correctly unless its actual page has rendered.
+Strict Scope Restrictions
+Change ONLY the Form Assistant section.
+Reuse the existing Live Form View instead of creating an unrelated new page.
+Preserve the current Tech AI UI, theme, layout, and responsiveness.
+Do not change AI Teacher, Smart Doc, Auto Quiz, Equation Graph, Dashboard, Profile, or any other section.
+Do not redesign the entire application.
+Do not remove existing Form Assistant functionality.
+Avoid unnecessary packages, dependencies, and backend changes.
+Do not hardcode any specific website or scholarship portal.
+Testing and Completion
+Test file uploads from the device file picker, PDF and image previews, URL navigation, and the actual rendering of an embeddable website.
+Verify that switching between uploads and URLs works correctly and that existing Form Assistant features remain functional.
+Run the available checks and fix any errors caused by your changes.
+At the end, tell me exactly which Form Assistant files you modified, what works, and which websites cannot be embedded because of their security restrictions.
+Implement this directly in my existing project. Do not just provide instructions or a mockup. Make the actual code changes and verify them.
