@@ -844,6 +844,7 @@
 .attempt-outcomes p,.attempt-outcomes small { grid-column:3;margin:0;color:hsl(var(--muted-foreground));line-height:1.5; }
 .form-url-tools { display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:10px;border:1px solid hsl(var(--border));border-radius:8px; }
 .form-url-tools>small { color:hsl(var(--muted-foreground));font-size:9px;line-height:1.5; }
+.form-url-actions { display:flex;gap:8px;flex-wrap:wrap; }
 .form-url-line { width:100%;display:flex;gap:6px; }.form-url-line input { flex:1;min-width:0;height:37px;padding:8px 10px;border:1px solid hsl(var(--input));border-radius:7px;color:hsl(var(--foreground));background:hsl(var(--background));font-size:10px; }
 .plus-mark { font-size:19px;line-height:12px; }
 @media(max-width:600px) { .speech-controls { grid-template-columns:1fr; }.voice-visualizer { justify-content:flex-start; }.speech-controls>label,.speech-controls>small { grid-column:1; }.quiz-chat-input .button { padding:0 10px; }.quiz-url-actions { flex-wrap:wrap; } }

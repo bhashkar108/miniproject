@@ -289,7 +289,7 @@ function AppContent() {
   const teacherQuestionHandler = useRef<(question:string)=>void>(()=>{});
 
   const { data: health } = useHealthCheck();
-  const session = useGetCurrentSession();
+  const session = useGetCurrentSession({ query: { queryKey: getGetCurrentSessionQueryKey(), retry: false } });
   const profileQuery = useGetStudentProfile({ query: { enabled: !!session.data, queryKey: getGetStudentProfileQueryKey() } });
   const summaryQuery = useGetDashboardSummary({ query: { enabled: !!session.data, queryKey: getGetDashboardSummaryQueryKey() } });
   const attemptsQuery = useListQuizAttempts({ query: { enabled: !!session.data, queryKey: getListQuizAttemptsQueryKey() } });
@@ -445,6 +445,11 @@ function AppContent() {
     const nextHistory=formHistory.slice(0,formHistoryIndex+1);
     if(nextHistory[nextHistory.length-1]!==url)nextHistory.push(url);
     setFormHistory(nextHistory);setFormHistoryIndex(nextHistory.length-1);setFormUrl(url);setFormPreviewUrl(url);setFormFile(null);setFormTextPreview('');setFormSource('url');setFormFrameVersion(value=>value+1);setForm(null);setFormValues({});setDocumentChecklist({});setCustomDocumentItems([]);setFormEditorOpen(false);setMissingQuestions([]);setReviewMessage('');setMessage('');
+  };
+  const openFormWebsiteInNewTab = (requestedUrl=formUrl) => {
+    const rawUrl=requestedUrl.trim();if(!rawUrl){setMessage('Paste a public form link first.');return;}
+    try{const parsed=new URL(rawUrl);if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error();window.open(parsed.href,'_blank','noopener,noreferrer');}
+    catch{setMessage('Enter a valid website address starting with https:// or http://.');}
   };
   const moveFormHistory = (direction:-1|1) => {
     const nextIndex=formHistoryIndex+direction;
@@ -777,7 +782,7 @@ function AppContent() {
             <div className="panel form-source-panel">
               <div className="panel-heading"><span className="heading-icon amber"><ClipboardCheck size={18}/></span><div><h2>{t('1. Add a form')}</h2><p>{t('PDF, image, DOCX, and text files supported')}</p></div></div>
               <label className="dropzone compact" htmlFor="form-file"><Upload size={21}/><b>{formFile?.name||t('Upload any form')}</b><span>{t('We do not assume a fixed template')}</span><input id="form-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.txt,.md,application/pdf,image/*" onChange={e=>receiveForm(e.target.files?.[0])} data-testid="input-form-file"/></label>
-              <div className="form-url-tools"><button className="button button-subtle button-small" type="button" onClick={()=>setFormUrlOpen(value=>!value)}><span className="plus-mark">+</span>{formUrlOpen?'Hide link':'Add form link'}</button>{formUrlOpen&&<><div className="form-url-line"><input type="url" value={formUrl} onChange={event=>setFormUrl(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();openFormWebsite();}}} placeholder="https://example.com/form" aria-label="Public form URL"/><button className="mic-button" type="button" title="Paste URL" onClick={async()=>{try{const text=await navigator.clipboard.readText();if(text)setFormUrl(text);}catch{setMessage('Paste the public form URL into the field.');}}}><ClipboardCheck size={15}/></button><button className="mic-button" type="button" title="Remove URL" onClick={()=>setFormUrl('')}><X size={15}/></button></div><button className="button button-primary button-small" type="button" onClick={()=>openFormWebsite()} disabled={!formUrl.trim()}><Globe2 size={14}/>Open Website</button><small>Opens the actual public page in the Live Form View. Some sites block embedded previews; use Open in New Tab if the preview is blank.</small></>}</div>
+               <div className="form-url-tools"><button className="button button-subtle button-small" type="button" onClick={()=>setFormUrlOpen(value=>!value)}><span className="plus-mark">+</span>{formUrlOpen?'Hide link':'Add form link'}</button>{formUrlOpen&&<><div className="form-url-line"><input type="url" value={formUrl} onChange={event=>setFormUrl(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();openFormWebsite();}}} placeholder="https://example.com/form" aria-label="Public form URL"/><button className="mic-button" type="button" title="Paste URL" onClick={async()=>{try{const text=await navigator.clipboard.readText();if(text)setFormUrl(text);}catch{setMessage('Paste the public form URL into the field.');}}}><ClipboardCheck size={15}/></button><button className="mic-button" type="button" title="Remove URL" onClick={()=>setFormUrl('')}><X size={15}/></button></div><div className="form-url-actions"><button className="button button-primary button-small" type="button" onClick={()=>openFormWebsite()} disabled={!formUrl.trim()}><Globe2 size={14}/>Show in Preview</button><button className="button button-subtle button-small" type="button" onClick={()=>openFormWebsiteInNewTab()} disabled={!formUrl.trim()}><ExternalLink size={14}/>Open Actual Page</button></div><small>Some portals block embedded previews. Open Actual Page always opens the real URL in a new tab; use Show in Preview when the site allows embedding.</small></>}</div>
               <div className="form-action-pair">
                 <button className="button button-primary" type="button" onClick={analyzeCurrentForm} disabled={(!formFile&&!formPreviewUrl.startsWith('http'))||(formSource==='url'&&formUrl.trim()!==formPreviewUrl)||analyzeForm.isPending||analyzeFormUrl.isPending} data-testid="button-analyze-current-form"><Sparkles size={15}/>{analyzeForm.isPending||analyzeFormUrl.isPending?'Analyzing…':'Analyze & fill with AI'}</button>
                 <button className="button button-subtle" type="button" onClick={()=>setFormEditorOpen(true)} disabled={!form} data-testid="button-edit-form-answers"><ClipboardCheck size={15}/>Edit answers & prepare</button>
