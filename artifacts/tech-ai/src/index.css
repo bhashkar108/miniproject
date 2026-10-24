@@ -995,3 +995,40 @@
   .workspace-footer nav { gap:6px 12px; }
   .qr-camera-panel,.qr-result-panel { padding:14px; }
 }
+
+/* Capture flash overlay */
+.capture-flash {
+  position: absolute; inset: 0; background: #fff; opacity: 0.85;
+  border-radius: inherit; pointer-events: none; z-index: 20;
+  animation: flashFade 0.5s ease-out forwards;
+}
+@keyframes flashFade {
+  0% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+/* Processed size note — prominent display */
+.processed-size-note {
+  margin: 0.75rem 0 0.25rem;
+  padding: 0.55rem 1rem;
+  background: var(--color-surface-raised, #f0fdf4);
+  border: 1px solid var(--color-accent, #22c55e);
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--color-text, #111);
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.dark .processed-size-note {
+  background: #052e16; border-color: #16a34a; color: #f0fdf4;
+}
+
+/* Rotation value badge */
+.rotation-value {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-accent-subtle, #dcfce7);
+  color: var(--color-accent-text, #166534);
+  border-radius: 0.3rem; padding: 0 0.35rem;
+  font-size: 0.75rem; font-weight: 700; margin-left: 0.3rem;
+  min-width: 2.2rem;
+}
+.dark .rotation-value { background: #052e16; color: #86efac; }

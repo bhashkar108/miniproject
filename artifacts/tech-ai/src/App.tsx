@@ -274,6 +274,7 @@ function AppContent() {
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [captureFlash, setCaptureFlash] = useState(false);
   const [qrActive, setQrActive] = useState(false);
   const [qrResult, setQrResult] = useState('');
   const [qrError, setQrError] = useState('');
@@ -687,8 +688,8 @@ function AppContent() {
     }catch(error){setMessage((error as Error)?.message||'The document could not be processed. Try another file.');return false;}
     finally{await sourcePdf?.destroy();setProcessingDoc(false);}
   };
-  const rotateDocument = async () => {
-    const next=(rotation+90)%360;setRotation(next);const processed=await transformDocument(next);if(processed)setMessage(`Rotation set to ${next}°. Your processed copy is refreshed.`);
+  const rotateDocument = () => {
+    const next=(rotation+90)%360;setRotation(next);setMessage(`Rotated to ${next}°. Click "Create processed copy" to apply changes.`);
   };
   const useProcessedInForm = async () => {
     if(!processedBlob||!docFile)return;
@@ -707,6 +708,7 @@ function AppContent() {
   };
   const capture = () => {
     const video=cameraVideo.current;if(!video)return;
+    setCaptureFlash(true);setTimeout(()=>setCaptureFlash(false),500);
     const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
     canvas.getContext('2d')?.drawImage(video,0,0);
     canvas.toBlob(blob=>{
@@ -858,11 +860,11 @@ function AppContent() {
           <div className="doc-workspace">
             <div className="panel doc-tools">
               <div className="panel-heading"><span className="heading-icon teal"><Camera size={18}/></span><div><h2>{t('Bring in a document')}</h2><p>{t('Capture now or select a local image or PDF')}</p></div></div>
-              <div className="camera-box" ref={cameraBox}>{cameraActive?<video ref={cameraVideo} autoPlay playsInline/>:<div className="camera-placeholder"><Camera size={24}/><span>{t('Camera preview')}</span><small>{t('Camera access stays in your browser.')}</small></div>}{cameraActive&&<button className="capture-button" onClick={capture} aria-label={t('Capture document')}><Camera size={18}/></button>}</div>
+              <div className="camera-box" ref={cameraBox}>{cameraActive?<video ref={cameraVideo} autoPlay playsInline/>:<div className="camera-placeholder"><Camera size={24}/><span>{t('Camera preview')}</span><small>{t('Camera access stays in your browser.')}</small></div>}{cameraActive&&<button className="capture-button" onClick={capture} aria-label={t('Capture document')}><Camera size={18}/></button>}{captureFlash&&<div className="capture-flash" aria-hidden="true"/>}</div>
               <div className="action-row"><button className="button button-primary" onClick={cameraActive?()=>{cameraStream.current?.getTracks().forEach(t=>t.stop());cameraStream.current=null;setCameraActive(false);}:startCamera} data-testid="button-camera">{cameraActive?t('Stop camera'):t('Start camera')}</button><label className="button button-subtle file-button"><ImagePlus size={16}/>{t('Choose file')}<input type="file" accept="image/*,.pdf" onChange={e=>selectDocument(e.target.files?.[0])} data-testid="input-document"/></label><button type="button" className="button button-subtle" onClick={toggleCameraFullscreen} disabled={!cameraActive} title="Expand camera preview"><Maximize2 size={16}/>Full screen</button></div>
               {cameraError&&<p className="error-inline">{cameraError}</p>}
               <div className="tool-divider"/><div className="panel-heading small-heading"><RotateCcw size={16}/><div><h2>{t('Document adjustments')}</h2><p>{t('Applied to a new copy, never the original')}</p></div></div>
-               <div className="action-row"><button className="button button-subtle" disabled={!docFile||processingDoc} onClick={()=>void rotateDocument()}><RotateCcw size={15}/>{t('Rotate 90°')} <span className="rotation-value">{rotation}°</span></button><button className="button button-primary" disabled={!docFile||processingDoc} onClick={()=>{void transformDocument();}} data-testid="button-process-doc">{processingDoc?<LoaderCircle size={15} className="spin"/>:<Zap size={15}/>} {processingDoc?t('Processing…'):t('Create processed copy')}</button></div>
+               <div className="action-row"><button className="button button-subtle" disabled={!docFile} onClick={rotateDocument}><RotateCcw size={15}/>{t('Rotate 90°')} <span className="rotation-value">{rotation}°</span></button><button className="button button-primary" disabled={!docFile||processingDoc} onClick={()=>{void transformDocument();}} data-testid="button-process-doc">{processingDoc?<LoaderCircle size={15} className="spin"/>:<Zap size={15}/>} {processingDoc?t('Processing…'):t('Create processed copy')}</button></div>
                {docFile&&<><label className="field-label">Convert copy to<select value={outputFormat} onChange={e=>setOutputFormat(e.target.value)}><option value="application/pdf">PDF</option><option value="image/png">PNG</option><option value="image/jpeg">JPG / JPEG</option></select></label><label className="field-label crop-control">Crop edges <span>{cropPercent}% · applied on all sides</span><input type="range" min="0" max="18" step="1" value={cropPercent} onChange={e=>setCropPercent(Number(e.target.value))}/><small>Adjust crop, then create a fresh copy to update the preview.</small></label><div className="compress-control"><label>File size target <b>{targetSizeKb<1024?`${targetSizeKb} KB`:`${(targetSizeKb/1024).toFixed(2)} MB`}</b></label><input type="range" min="5" max={Math.max(250,Math.ceil(docFile.size/1024*2))} step="5" value={Math.min(targetSizeKb,Math.max(250,Math.ceil(docFile.size/1024*2)))} onChange={e=>setTargetSizeKb(Number(e.target.value))}/><small>Original: {fileSizeLabel(docFile.size)} · left reduces the copy size, right allows a larger copy{processedSize!==null?` · processed: ${fileSizeLabel(processedSize)}`:''}</small></div></>}
               <p className="privacy-note"><ShieldCheck size={14}/>{t('Processing stays in your browser. PDF copies are rasterized; selectable text may not be preserved.')}</p>
             </div>
