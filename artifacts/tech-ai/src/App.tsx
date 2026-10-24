@@ -16,20 +16,20 @@ import { parse } from 'mathjs';
 import { PDFDocument } from 'pdf-lib';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import jsQR from 'jsqr';
+
 import {
   Activity, ArrowLeft, ArrowRight, AudioLines, BookOpen, Camera, Check, CheckCircle2, ChevronDown,
   CircleHelp, Clock3, FileImage, FileText, GraduationCap, House, ImagePlus, LoaderCircle,
   LogOut, Menu, Moon, Play, ShieldCheck, Sparkles, Sun, Upload, UserRound,
   WandSparkles, X, Zap, Brain, RotateCcw, Download, Eye, ClipboardCheck, Sigma, Languages,
   Mic, MicOff, Maximize2, FilePlus2, MessageCircle, Send, Globe2, ZoomIn, ZoomOut,
-  QrCode, Smartphone, ExternalLink,
+  Smartphone, ExternalLink,
 } from 'lucide-react';
 import '@/index.css';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 const client = new QueryClient();
-type Module = 'home' | 'teacher' | 'forms' | 'docs' | 'equations' | 'quiz' | 'progress' | 'profile' | 'qr';
+type Module = 'home' | 'teacher' | 'forms' | 'docs' | 'equations' | 'quiz' | 'progress' | 'profile';
 type UiLanguage = 'English'|'Hindi'|'Hinglish'|'Bengali'|'Tamil'|'Telugu'|'Marathi'|'Gujarati'|'Punjabi'|'Kannada'|'Malayalam'|'Odia';
 type QuizWithSource = QuizAnalysis & { sourceFile?: File; sourceUrl: string };
 type Recognition = { lang:string; continuous:boolean; interimResults:boolean; onresult:((event:any)=>void)|null; onend:(()=>void)|null; onerror:(()=>void)|null; start:()=>void; stop:()=>void };
@@ -96,7 +96,7 @@ function translate(language:UiLanguage,text:string):string {
 const navItems: { id: Module; label: string; icon: typeof House }[] = [
   { id: 'home', label: 'Workspace', icon: House }, { id: 'teacher', label: 'AI Teacher', icon: BookOpen },
   { id: 'forms', label: 'Form assistant', icon: ClipboardCheck }, { id: 'docs', label: 'Smart Doc', icon: WandSparkles },
-  { id: 'equations', label: 'Equation graph', icon: Sigma }, { id: 'quiz', label: 'Auto Quiz', icon: Brain }, { id: 'qr', label: 'QR Scanner', icon: QrCode }, { id: 'progress', label:'Progress', icon:Activity }, { id: 'profile', label: 'My profile', icon: UserRound },
+  { id: 'equations', label: 'Equation graph', icon: Sigma }, { id: 'quiz', label: 'Auto Quiz', icon: Brain }, { id: 'progress', label:'Progress', icon:Activity }, { id: 'profile', label: 'My profile', icon: UserRound },
 ];
 const profileFields: (keyof StudentProfile)[] = ['name','roll','father','mother','village','district','college','section','branch','course','subject','email','phone','dateOfBirth','gender','address','state','postalCode','country','nationality','guardianName','guardianRelationship','guardianPhone','admissionNumber','semester','academicYear'];
 const profileLabels: Record<string,string> = { name:'Full name', roll:'Student / roll number', father:"Father's name", mother:"Mother's name", village:'Village or town', district:'District', college:'College or institute', section:'Section', branch:'Branch', course:'Course', subject:'Subject', email:'Email', phone:'Phone', dateOfBirth:'Date of birth', gender:'Gender', address:'Address', state:'State', postalCode:'Postal code / PIN', country:'Country', nationality:'Nationality', guardianName:'Guardian name', guardianRelationship:'Relationship to guardian', guardianPhone:'Guardian phone', admissionNumber:'Admission number', semester:'Semester', academicYear:'Academic year' };
@@ -275,9 +275,6 @@ function AppContent() {
   const [cameraError, setCameraError] = useState('');
   const [photoBusy, setPhotoBusy] = useState(false);
   const [captureFlash, setCaptureFlash] = useState(false);
-  const [qrActive, setQrActive] = useState(false);
-  const [qrResult, setQrResult] = useState('');
-  const [qrError, setQrError] = useState('');
   const [installPrompt, setInstallPrompt] = useState<{prompt:()=>Promise<void>;userChoice:Promise<{outcome:string}>}|null>(null);
   const [equation, setEquation] = useState('sin(x)');
   const [secondEquation,setSecondEquation]=useState('');
@@ -291,9 +288,6 @@ function AppContent() {
   const fileInput = useRef<HTMLInputElement>(null);
   const cameraVideo = useRef<HTMLVideoElement>(null);
   const cameraStream = useRef<MediaStream|null>(null);
-  const qrVideo = useRef<HTMLVideoElement>(null);
-  const qrStream = useRef<MediaStream|null>(null);
-  const qrFrame = useRef<number|null>(null);
   const cameraBox = useRef<HTMLDivElement>(null);
   const speechRecognition = useRef<Recognition|null>(null);
   const keepListening = useRef(false);
@@ -332,7 +326,6 @@ function AppContent() {
   useEffect(() => () => { if(quizSourceUrl) URL.revokeObjectURL(quizSourceUrl); }, [quizSourceUrl]);
   useEffect(() => () => { cameraStream.current?.getTracks().forEach(t=>t.stop());keepListening.current=false;speechRecognition.current?.stop(); }, []);
   useEffect(() => { if(cameraVideo.current && cameraStream.current) cameraVideo.current.srcObject = cameraStream.current; }, [cameraActive]);
-  useEffect(() => { if(qrVideo.current && qrStream.current) qrVideo.current.srcObject = qrStream.current; }, [qrActive]);
   useEffect(() => {
     const capture = (event:Event) => { event.preventDefault();setInstallPrompt(event as InstallPromptEvent); };
     window.addEventListener('beforeinstallprompt',capture);
@@ -345,7 +338,6 @@ function AppContent() {
       setMessage('Automatic installation is unavailable here. Use your browser menu to add this workspace to your home screen.');
     });
   }, []);
-  useEffect(() => () => { qrStream.current?.getTracks().forEach(track=>track.stop());if(qrFrame.current!==null)cancelAnimationFrame(qrFrame.current); }, []);
   useEffect(()=>()=>{if(formPreviewUrl.startsWith('blob:'))URL.revokeObjectURL(formPreviewUrl);},[formPreviewUrl]);
   const currentUser = session.data || {id:0,name:profileDraft.name||'Guest student',email:'Guest workspace'};
   const profile = session.data ? (profileQuery.data || blankProfile) : profileDraft;
@@ -435,10 +427,10 @@ function AppContent() {
     catch{setMessage('The microphone could not be started. Check browser permission.');}
   };
   const teach = (voiceQuestion?:string) => {
-    const content = sourceText.trim() || materialData?.extractedText || '';
-    if(!content.trim()){setMessage('Upload your own study material or paste notes to begin.');return;}
     const question=(voiceQuestion??lessonQuestion).trim();
-    explain.mutate({data:{content,question:question||undefined,language}}, {onSuccess:(result)=>{setLesson(result);addProgress('lesson',result.title,material?.name||materialData?.fileName||'Pasted study notes');},onError:uploadError});
+    const content = sourceText.trim() || materialData?.extractedText || question || '';
+    if(!content.trim()){setMessage('Upload your own study material, paste notes, or ask a question to begin.');return;}
+    explain.mutate({data:{content,question:question||undefined,language}}, {onSuccess:(result)=>{setLesson(result);addProgress('lesson',result.title,material?.name||materialData?.fileName||question||'Study question');},onError:uploadError});
   };
   teacherQuestionHandler.current=(question)=>teach(question);
   const receiveForm = (file?:File) => {
@@ -545,9 +537,11 @@ function AppContent() {
       setDesiredCorrect(Math.min(5,result.totalQuestions));setMessage('Quiz questions were imported from the public link.');
     },onError:uploadError});
   };
-  const askAboutQuiz = () => {
-    if(!quiz||!quizChatText.trim())return;
-    const question=quizChatText.trim();setQuizChatText('');
+  const askAboutQuiz = (customPrompt?:string) => {
+    if(!quiz)return;
+    const question=(customPrompt || quizChatText).trim();
+    if(!question)return;
+    if(!customPrompt) setQuizChatText('');
     setQuizChatMessages(previous=>[...previous,{role:'user',text:question}]);
      askQuiz.mutate({data:{quizId:quiz.quizId,question}},{onSuccess:result=>setQuizChatMessages(previous=>[...previous,{role:'assistant',text:result.answer}]),onError:error=>{const detail=(error as Error)?.message||'The quiz service is unavailable.';uploadError(error);setQuizChatMessages(previous=>[...previous,{role:'assistant',text:`I could not answer that request. ${detail} You can still review the detected questions and your answers here.`}]);}});
   };
@@ -652,12 +646,14 @@ function AppContent() {
             const page=output.addPage([cropped.width*.75,cropped.height*.75]);
             page.drawImage(image,{x:0,y:0,width:page.getWidth(),height:page.getHeight()});
           }else{
+            if(processedUrl) URL.revokeObjectURL(processedUrl);
             setProcessedType(mime);setProcessedBlob(blob);setProcessedUrl(URL.createObjectURL(blob));setProcessedSize(blob.size);
           }
           canvas.width=0;canvas.height=0;cropped.width=0;cropped.height=0;sourcePage.cleanup();
         }
         if(output){
           const pdfBytes=await output.save();const blob=new Blob([pdfBytes.buffer.slice(pdfBytes.byteOffset,pdfBytes.byteOffset+pdfBytes.byteLength) as ArrayBuffer],{type:'application/pdf'});
+          if(processedUrl) URL.revokeObjectURL(processedUrl);
           setProcessedType('application/pdf');setProcessedBlob(blob);setProcessedUrl(URL.createObjectURL(blob));setProcessedSize(blob.size);
         }
         addProgress('document',docFile.name,`Processed ${pageCount} PDF ${pageCount===1?'page':'pages'}; original retained`,1);
@@ -666,7 +662,7 @@ function AppContent() {
         const image=new Image();image.src=docUrl;
         await new Promise<void>((resolve,reject)=>{image.onload=()=>resolve();image.onerror=()=>reject(new Error('Unable to read this image.'));});
         const maxSize=2400,scale=Math.min(1,maxSize/Math.max(image.width,image.height));
-        const width=Math.round(image.width*scale),height=Math.round(image.height*scale),swap=Math.abs(rotation)%180===90;
+        const width=Math.round(image.width*scale),height=Math.round(image.height*scale),swap=Math.abs(rotationOverride)%180===90;
         const canvas=document.createElement('canvas');canvas.width=swap?height:width;canvas.height=swap?width:height;
         const context=canvas.getContext('2d');if(!context) throw new Error('Your browser could not create an image preview.');
         context.translate(canvas.width/2,canvas.height/2);context.rotate(rotationOverride*Math.PI/180);
@@ -676,9 +672,13 @@ function AppContent() {
           const jpg=await canvasBlob(cropped,'image/jpeg',targetSizeKb*1024);
           const output=await PDFDocument.create();const embedded=await output.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
           const page=output.addPage([embedded.width*.75,embedded.height*.75]);page.drawImage(embedded,{x:0,y:0,width:page.getWidth(),height:page.getHeight()});
-          const pdfBytes=await output.save();const blob=new Blob([pdfBytes.buffer.slice(pdfBytes.byteOffset,pdfBytes.byteOffset+pdfBytes.byteLength) as ArrayBuffer],{type:'application/pdf'});setProcessedType('application/pdf');setProcessedBlob(blob);setProcessedUrl(URL.createObjectURL(blob));setProcessedSize(blob.size);
+          const pdfBytes=await output.save();const blob=new Blob([pdfBytes.buffer.slice(pdfBytes.byteOffset,pdfBytes.byteOffset+pdfBytes.byteLength) as ArrayBuffer],{type:'application/pdf'});
+          if(processedUrl) URL.revokeObjectURL(processedUrl);
+          setProcessedType('application/pdf');setProcessedBlob(blob);setProcessedUrl(URL.createObjectURL(blob));setProcessedSize(blob.size);
         }else{
-          const blob=await canvasBlob(cropped,outputFormat,targetSizeKb*1024);setProcessedType(outputFormat);setProcessedBlob(blob);setProcessedUrl(URL.createObjectURL(blob));setProcessedSize(blob.size);
+          const blob=await canvasBlob(cropped,outputFormat,targetSizeKb*1024);
+          if(processedUrl) URL.revokeObjectURL(processedUrl);
+          setProcessedType(outputFormat);setProcessedBlob(blob);setProcessedUrl(URL.createObjectURL(blob));setProcessedSize(blob.size);
         }
         addProgress('document',docFile.name,'Rotated, converted and compressed a local copy',1);
         setMessage('The processed copy is ready. The original is unchanged.');
@@ -717,44 +717,7 @@ function AppContent() {
       canvas.width=0;canvas.height=0;
     },'image/jpeg',0.9);
   };
-  const stopQrScanner = () => {
-    qrStream.current?.getTracks().forEach(track=>track.stop());qrStream.current=null;
-    if(qrFrame.current!==null)cancelAnimationFrame(qrFrame.current);
-    qrFrame.current=null;setQrActive(false);
-  };
-  const startQrScanner = async () => {
-    try {
-      qrStream.current=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-      setQrError('');setQrResult('');setQrActive(true);
-      const scan=()=>{
-        const video=qrVideo.current;
-        if(video&&video.readyState>=2&&video.videoWidth){
-          const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
-          const context=canvas.getContext('2d',{willReadFrequently:true});
-          if(context){
-            context.drawImage(video,0,0);
-            const code=jsQR(context.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height,{inversionAttempts:'attemptBoth'});
-            if(code?.data){setQrResult(code.data);stopQrScanner();setMessage('QR code read. Review the result before opening any link.');return;}
-          }
-          canvas.width=0;canvas.height=0;
-        }
-        qrFrame.current=requestAnimationFrame(scan);
-      };
-      qrFrame.current=requestAnimationFrame(scan);
-    }catch{setQrError('Camera access is unavailable. Allow camera permission or scan an image instead.');setQrActive(false);}
-  };
-  const scanQrFile = async (file?:File) => {
-    if(!file)return;
-    try{
-      const bitmap=await createImageBitmap(file);const canvas=document.createElement('canvas');
-      canvas.width=bitmap.width;canvas.height=bitmap.height;const context=canvas.getContext('2d',{willReadFrequently:true});
-      if(!context)throw new Error('Could not read this image.');
-      context.drawImage(bitmap,0,0);const result=jsQR(context.getImageData(0,0,canvas.width,canvas.height).data,canvas.width,canvas.height,{inversionAttempts:'attemptBoth'});
-      bitmap.close();canvas.width=0;canvas.height=0;
-      if(!result?.data){setQrError('No QR code was found in this image. Try a sharper, well-lit photo.');return;}
-      setQrError('');setQrResult(result.data);setMessage('QR code read. Review the result before opening any link.');
-    }catch(error){setQrError((error as Error).message||'This image could not be scanned.');}
-  };
+
   const graphData = useMemo(()=>{
     const curves=[equation,secondEquation].map(text=>{
       const vertical=text.trim().match(/^x\s*=\s*(-?(?:\d+\.?\d*|\.\d+))$/i);
@@ -865,14 +828,13 @@ function AppContent() {
               {cameraError&&<p className="error-inline">{cameraError}</p>}
               <div className="tool-divider"/><div className="panel-heading small-heading"><RotateCcw size={16}/><div><h2>{t('Document adjustments')}</h2><p>{t('Applied to a new copy, never the original')}</p></div></div>
                <div className="action-row"><button className="button button-subtle" disabled={!docFile} onClick={rotateDocument}><RotateCcw size={15}/>{t('Rotate 90°')} <span className="rotation-value">{rotation}°</span></button><button className="button button-primary" disabled={!docFile||processingDoc} onClick={()=>{void transformDocument();}} data-testid="button-process-doc">{processingDoc?<LoaderCircle size={15} className="spin"/>:<Zap size={15}/>} {processingDoc?t('Processing…'):t('Create processed copy')}</button></div>
-               {docFile&&<><label className="field-label">Convert copy to<select value={outputFormat} onChange={e=>setOutputFormat(e.target.value)}><option value="application/pdf">PDF</option><option value="image/png">PNG</option><option value="image/jpeg">JPG / JPEG</option></select></label><label className="field-label crop-control">Crop edges <span>{cropPercent}% · applied on all sides</span><input type="range" min="0" max="18" step="1" value={cropPercent} onChange={e=>setCropPercent(Number(e.target.value))}/><small>Adjust crop, then create a fresh copy to update the preview.</small></label><div className="compress-control"><label>File size target <b>{targetSizeKb<1024?`${targetSizeKb} KB`:`${(targetSizeKb/1024).toFixed(2)} MB`}</b></label><input type="range" min="5" max={Math.max(250,Math.ceil(docFile.size/1024*2))} step="5" value={Math.min(targetSizeKb,Math.max(250,Math.ceil(docFile.size/1024*2)))} onChange={e=>setTargetSizeKb(Number(e.target.value))}/><small>Original: {fileSizeLabel(docFile.size)} · left reduces the copy size, right allows a larger copy{processedSize!==null?` · processed: ${fileSizeLabel(processedSize)}`:''}</small></div></>}
+               {docFile&&<><label className="field-label">Convert copy to<select value={outputFormat} onChange={e=>setOutputFormat(e.target.value)}><option value="application/pdf">PDF</option><option value="image/png">PNG</option><option value="image/jpeg">JPG / JPEG</option></select></label><label className="field-label crop-control">Crop edges <span>{cropPercent}% · applied on all sides</span><input type="range" min="0" max="18" step="1" value={cropPercent} onChange={e=>setCropPercent(Number(e.target.value))}/><small>Adjust crop, then click "Create processed copy" to update.</small></label><div className="compress-control"><label>File size target <b>{targetSizeKb<1024?`${targetSizeKb} KB`:`${(targetSizeKb/1024).toFixed(2)} MB`}</b></label><input type="range" min="5" max={Math.max(250,Math.ceil(docFile.size/1024*2))} step="5" value={Math.min(targetSizeKb,Math.max(250,Math.ceil(docFile.size/1024*2)))} onChange={e=>setTargetSizeKb(Number(e.target.value))}/><small>Original: {fileSizeLabel(docFile.size)} · left reduces the copy size, right allows a larger copy</small></div>{processedSize!==null&&<div className="size-comparison-row"><span className="size-before">Original: <b>{fileSizeLabel(docFile.size)}</b></span><span className="size-arrow">➔</span><span className="size-after">Processed: <b>{fileSizeLabel(processedSize)}</b></span><span className={`size-delta ${processedSize<=docFile.size?'size-saved':'size-larger'}`}>{processedSize<=docFile.size?`${Math.round((1-processedSize/docFile.size)*100)}% smaller (${fileSizeLabel(docFile.size-processedSize)} saved)`:`${Math.round((processedSize/docFile.size-1)*100)}% larger`}</span></div>}</>}
               <p className="privacy-note"><ShieldCheck size={14}/>{t('Processing stays in your browser. PDF copies are rasterized; selectable text may not be preserved.')}</p>
             </div>
-             <div className="panel compare-panel"><div className="compare-header"><div><span className="eyebrow">{t('DOCUMENT PREVIEW')}</span><h2>{docFile?.name||t('Your document, side by side')}</h2></div>{docFile&&<div className="doc-zoom-tools"><span className="local-badge">{t('LOCAL PREVIEW')}</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.max(.5,+(value-.1).toFixed(1)))} aria-label="Zoom out" disabled={docZoom<=.5}><ZoomOut size={15}/></button><span>{Math.round(docZoom*100)}%</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.min(1.8,+(value+.1).toFixed(1)))} aria-label="Zoom in" disabled={docZoom>=1.8}><ZoomIn size={15}/></button></div>}</div>{docFile?<div className="compare-grid"><PreviewBox label={t('Original')} file={docFile} url={docUrl} rotation={0} zoom={docZoom}/><PreviewBox label={t('Processed copy')} file={docFile} url={processedUrl} rotation={0} mimeType={processedType} zoom={docZoom}/></div>:<EmptyState icon={<FileImage size={22}/>} title={t('Your document goes here')} body={t('Select or capture an actual file to see its original and processed previews side by side.')}/ >}{processedUrl&&<div className="processed-size-note">Processed copy size: <b>{processedSize===null?'Preparing…':fileSizeLabel(processedSize)}</b> · original unchanged</div>}{processedUrl&&<div className="form-footer"><span className="privacy-note">Actual output size shown above</span><a className="button button-subtle" href={processedUrl} download={`processed-${docFile?.name.replace(/\.[^.]+$/,'')||'document'}.${processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg'}`}><Download size={15}/>{t('Download copy')}</a><button className="button button-primary" onClick={useProcessedInForm}><FilePlus2 size={15}/>Use in Form Assistant</button></div>}</div>
+             <div className="panel compare-panel"><div className="compare-header"><div><span className="eyebrow">{t('DOCUMENT PREVIEW')}</span><h2>{docFile?.name||t('Your document, side by side')}</h2></div>{docFile&&<div className="doc-zoom-tools"><span className="local-badge">{t('LOCAL PREVIEW')}</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.max(.5,+(value-.1).toFixed(1)))} aria-label="Zoom out" disabled={docZoom<=.5}><ZoomOut size={15}/></button><span>{Math.round(docZoom*100)}%</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.min(1.8,+(value+.1).toFixed(1)))} aria-label="Zoom in" disabled={docZoom>=1.8}><ZoomIn size={15}/></button></div>}</div>{docFile?<div className="compare-grid"><PreviewBox label={t('Original')} file={docFile} url={docUrl} rotation={0} zoom={docZoom}/><PreviewBox label={t('Processed copy')} file={docFile} url={processedUrl} rotation={0} mimeType={processedType} zoom={docZoom}/></div>:<EmptyState icon={<FileImage size={22}/>} title={t('Your document goes here')} body={t('Select or capture an actual file to see its original and processed previews side by side.')}/ >}{processedUrl&&<div className="processed-size-note"><span>Processed copy size: <b>{processedSize===null?'Preparing…':fileSizeLabel(processedSize)}</b></span>{docFile&&<span className="original-compare-label"> (Original: {fileSizeLabel(docFile.size)})</span>}</div>}{processedUrl&&<div className="form-footer"><span className="privacy-note">Actual output size shown above</span><a className="button button-subtle" href={processedUrl} download={`processed-${docFile?.name.replace(/\.[^.]+$/,'')||'document'}.${processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg'}`}><Download size={15}/>{t('Download copy')}</a><button className="button button-primary" onClick={useProcessedInForm}><FilePlus2 size={15}/>Use in Form Assistant</button></div>}</div>
           </div>
         </section>}
         {module==='equations'&&<section className="page-section"><PageHeading eyebrow={t('EXPLORE THE SHAPE OF AN EQUATION')} title={t('Equation graph')} subtitle={t('Enter a function of x and explore its curve. Try common Math functions such as sin(x), x*x, exp(-x*x), or sqrt(abs(x)).')}/><div className="equation-layout"><div className="panel equation-controls"><div className="panel-heading"><span className="heading-icon violet"><Sigma size={19}/></span><div><h2>{t('Your function')}</h2><p>{t('Graph updates as you type')}</p></div></div><label className="field-label">y = f(x) or x = c<input value={equation} onChange={e=>setEquation(e.target.value)} placeholder="e.g. sin(x) or x=0" className="equation-input" data-testid="input-equation"/></label><label className="field-label">Second equation <span className="field-hint">Optional · compare two local plots</span><input value={secondEquation} onChange={e=>setSecondEquation(e.target.value)} placeholder="e.g. cos(x) or x=2" className="equation-input" data-testid="input-equation-second"/></label><label className="button button-subtle file-button equation-ocr">{recognizeEquation.isPending?<LoaderCircle size={15} className="spin"/>:<Upload size={15}/>} {t('Read equations from an image or PDF')}<input type="file" accept="image/*,.pdf" onChange={event=>recognizeEquationImage(event.target.files?.[0])} data-testid="input-equation-ocr"/></label>{detectedEquations.length>0&&<div className="detected-equations"><span>{t('Detected equations')}</span>{detectedEquations.map((item,index)=><button type="button" key={`${index}-${item}`} onClick={()=>index===0?setEquation(item):setSecondEquation(item)}>{item}</button>)}</div>}<div className="equation-chips"><span>{t('Try')}</span>{['sin(x)','x*x','cos(x)','sqrt(abs(x))','x=0'].map(item=><button key={item} onClick={()=>setEquation(item)}>{item}</button>)}</div><label className="field-label">{t('Horizontal range')} <span className="range-value">−{graphRange} to {graphRange}</span><input type="range" min="2" max="12" value={graphRange} onChange={e=>setGraphRange(Number(e.target.value))} data-testid="input-graph-range"/></label><div className="equation-note"><CircleHelp size={15}/><span>{t('Use x and common math functions. Expression parsing is restricted and runs locally in your browser.')}</span></div></div><div className="panel graph-panel"><div className="graph-heading"><div><span className="eyebrow">{t('LIVE PLOT')}</span><h2>{equation || '…'}{secondEquation?`  ·  ${secondEquation}`:''}</h2></div><span className="graph-range-label">x ∈ [−{graphRange}, {graphRange}]</span></div><div className="graph-container">{graphError?<EmptyState icon={<Sigma size={21}/>} title={t('Enter a valid function')} body={t('Use supported math syntax, for example sin(x) or x*x.')}/>:<svg className="equation-graph" viewBox="0 0 560 300" role="img" aria-label={`${t('Graph of')} ${equation}${secondEquation?` and ${secondEquation}`:''}`}><g className="graph-grid">{Array.from({length:15},(_,i)=><line key={`v${i}`} x1={i*40} x2={i*40} y1="0" y2="300"/>)}{Array.from({length:9},(_,i)=><line key={`h${i}`} x1="0" x2="560" y1={i*37.5} y2={i*37.5}/>)}</g><line className="graph-axis" x1="0" x2="560" y1="150" y2="150"/><line className="graph-axis" x1="280" x2="280" y1="0" y2="300"/>{graphData.curves.map((curve,i)=>curve.valid&&<path key={i} className={`graph-curve graph-curve-${i}`} d={curve.path}/>)}{graphData.curves.flatMap((curve,i)=>curve.valid?curve.points.map((point,j)=><g key={`int-${i}-${j}`}><circle className="graph-intercept" cx={280+point.x/graphRange*280} cy={150-point.y*25} r="4"/><text className="graph-point-label" x={Math.min(495,Math.max(4,280+point.x/graphRange*280+6))} y={Math.min(290,Math.max(14,150-point.y*25-8))}>{point.label}</text></g>):[])}{graphData.intersections.map((point,i)=><g key={`cross-${i}`}><circle className="graph-crossing" cx={280+point.x/graphRange*280} cy={150-point.y*25} r="5"/><text className="graph-point-label" x={Math.min(495,280+point.x/graphRange*280+7)} y={Math.max(14,150-point.y*25-8)}>{point.label}</text></g>)}<text className="graph-label" x="535" y="143">x</text><text className="graph-label" x="288" y="14">y</text></svg>}</div><div className="graph-footer"><span><i className="curve-key"/>f(x) · intercepts and crossings</span><span>{t('Scale updates with your selected range')}</span></div></div></div></section>}
-         {module==='qr'&&<section className="page-section"><PageHeading eyebrow="CAMERA · IMAGE · REVIEW" title="QR Scanner" subtitle="Read a code from your camera or an image. Nothing opens until you choose to follow a link."/><div className="qr-layout"><div className="panel qr-camera-panel"><div className="panel-heading"><span className="heading-icon teal"><QrCode size={18}/></span><div><h2>Scan a code</h2><p>Camera access stays in this browser</p></div></div><div className={`qr-camera ${qrActive?'active':''}`}>{qrActive?<video ref={qrVideo} autoPlay playsInline muted/>:<div className="qr-placeholder"><QrCode size={36}/><span>Camera scanner ready</span><small>Position a QR code inside the frame</small></div>}<span className="qr-corners" aria-hidden="true"/></div><div className="action-row"><button className="button button-primary" onClick={qrActive?stopQrScanner:()=>void startQrScanner()}>{qrActive?'Stop scanning':'Start camera scan'}</button><label className="button button-subtle file-button"><ImagePlus size={15}/>Choose image<input type="file" accept="image/*" onChange={event=>scanQrFile(event.target.files?.[0])} data-testid="input-qr-image"/></label></div>{qrError&&<p className="error-inline" role="alert">{qrError}</p>}</div><div className="panel qr-result-panel"><span className="eyebrow">DECODED CONTENT</span>{qrResult?<><h2>Code found</h2><pre className="qr-result-text">{qrResult}</pre><div className="action-row"><button className="button button-subtle" onClick={async()=>{try{await navigator.clipboard.writeText(qrResult);setMessage('QR content copied.');}catch{setMessage('Select and copy the decoded text manually.');}}}><ClipboardCheck size={15}/>Copy content</button>{(qrResult.startsWith('https://')||qrResult.startsWith('http://'))&&<a className="button button-primary" href={qrResult} target="_blank" rel="noreferrer"><ExternalLink size={15}/>Open link</a>}</div><p className="privacy-note"><ShieldCheck size={14}/>Always check a scanned link before opening it.</p></>:<EmptyState icon={<QrCode size={22}/>} title="Your scan appears here" body="Start the camera or choose an image containing a QR code. Review the decoded value before taking action."/ >}</div></div></section>}
          {module==='quiz'&&<section className="page-section">
           <PageHeading eyebrow="PRACTICE WITH YOUR OWN QUIZZES" title="Auto Quiz" subtitle="Upload your quiz, inspect the full source, practise manually, or auto-solve to an exact target score."/>
           <div className="quiz-layout">
@@ -899,7 +861,7 @@ function AppContent() {
             <div className="panel question-panel">
               {quiz&&((quizFile&&quizSourceUrl)||quiz.sourceUrl)&&<QuizDocumentPreview file={quizFile||new File([],quiz.fileName,{type:'text/html'})} url={quiz.sourceUrl||quizSourceUrl} quiz={quiz} open={quizStarted===null&&submittedAttempt===null}/>}
               {quizStarted!==null&&<div className={`quiz-timer ${quizSecondsLeft<60?'quiz-timer-low':''}`}><Clock3 size={15}/><span>{quizRunMode==='target_score'?'Auto submit in':'Time left'}</span><b>{String(Math.floor(quizSecondsLeft/60)).padStart(2,'0')}:{String(quizSecondsLeft%60).padStart(2,'0')}</b></div>}
-              {quiz&&submittedAttempt?<QuizAttemptSummary quiz={quiz} attempt={submittedAttempt}/>:quiz&&quizStarted!==null&&quiz.questions[questionIndex]?<QuizQuestionCard quiz={quiz} index={questionIndex} selected={selectedAnswer} setSelected={setSelectedAnswer} feedback={answerFeedback} onCheck={checkAnswer} onNext={nextQuestion} checking={solveQuestion.isPending} submitting={submitAttempt.isPending} results={attemptResults}/>:quiz?<EmptyState icon={<CheckCircle2 size={22}/>} title="Quiz ready to practice" body={`${quiz.totalQuestions} questions detected from ${quiz.fileName}. Open the source preview or start an attempt when you're ready.`}/>:<EmptyState icon={<Brain size={22}/>} title="Your quiz practice appears here" body="Upload a real quiz to inspect every detected question, choose answers, and get question-by-question feedback."/>}
+              {quiz&&submittedAttempt?<QuizAttemptSummary quiz={quiz} attempt={submittedAttempt}/>:quiz&&quizStarted!==null&&quiz.questions[questionIndex]?<QuizQuestionCard quiz={quiz} index={questionIndex} selected={selectedAnswer} setSelected={setSelectedAnswer} feedback={answerFeedback} onCheck={checkAnswer} onNext={nextQuestion} checking={solveQuestion.isPending} submitting={submitAttempt.isPending} results={attemptResults} onAskAi={(prompt)=>askAboutQuiz(prompt)}/>:quiz?<QuizQuestionsOverview quiz={quiz} onBegin={beginQuiz} onAutoSolve={autoSolveAll} submitting={submitAttempt.isPending}/>:<EmptyState icon={<Brain size={22}/>} title="Your quiz practice appears here" body="Upload a real quiz to inspect every detected question, choose answers, and get question-by-question feedback."/>}
             </div>
           </div>
           {quiz&&<div className="panel quiz-chat-panel"><div className="panel-heading"><span className="heading-icon mint"><MessageCircle size={18}/></span><div><h2>Discuss this quiz with AI</h2><p>Ask about a question, an answer, or the topic behind it.</p></div></div><div className="quiz-chat-messages" aria-live="polite">{quizChatMessages.length?quizChatMessages.map((item,index)=><div key={index} className={`quiz-chat-message ${item.role}`}><b>{item.role==='user'?'You':'AI tutor'}</b><p>{item.text}</p></div>):<p className="empty-inline">Your quiz tutor chat will appear here.</p>}{askQuiz.isPending&&<InlineLoading label="The AI tutor is answering"/>}</div><form className="quiz-chat-input" onSubmit={event=>{event.preventDefault();askAboutQuiz();}}><input value={quizChatText} onChange={event=>setQuizChatText(event.target.value)} placeholder="Ask about a quiz question…" aria-label="Ask the quiz tutor"/><button className="button button-primary" type="submit" disabled={!quizChatText.trim()||askQuiz.isPending}><Send size={15}/>Send</button></form></div>}
@@ -932,7 +894,7 @@ function AppContent() {
             </form>
           </div>
         </section>}
-        <footer className="workspace-footer"><div className="footer-brand"><span className="brand-mark"><GraduationCap size={16}/></span><span><b>techai</b><small>Private study space · You stay in control</small></span></div><nav aria-label="Workspace shortcuts"><button onClick={()=>switchModule('progress')} data-testid="footer-progress">Progress</button><button onClick={()=>switchModule('profile')} data-testid="footer-profile">Profile & privacy</button><button onClick={()=>switchModule('qr')} data-testid="footer-qr">QR Scanner</button><button onClick={()=>void promptInstall()} data-testid="footer-install">Install app</button></nav><small className="footer-disclaimer">External forms are never submitted for you.</small></footer>
+        <footer className="workspace-footer"><div className="footer-brand"><span className="brand-mark"><GraduationCap size={16}/></span><span><b>techai</b><small>Private study space · You stay in control</small></span></div><nav aria-label="Workspace shortcuts"><button onClick={()=>switchModule('progress')} data-testid="footer-progress">Progress</button><button onClick={()=>switchModule('profile')} data-testid="footer-profile">Profile & privacy</button><button onClick={()=>void promptInstall()} data-testid="footer-install">Install app</button></nav><small className="footer-disclaimer">External forms are never submitted for you.</small></footer>
       </main>
     </div>
     {showPreview&&form&&<div className="modal-backdrop" onClick={()=>setShowPreview(false)}><div className="preview-modal" onClick={e=>e.stopPropagation()}><button className="icon-button modal-close" onClick={()=>setShowPreview(false)} aria-label="Close preview"><X size={17}/></button><span className="eyebrow">FORM REVIEW PREVIEW</span><h2>{form.title}</h2><p className="muted-copy">{form.fileName} · {form.fields.length} detected fields</p><div className="preview-values">{form.fields.map(field=><div key={field.id}><b>{field.label}</b><span>{formValues[field.id]||'Not provided'}</span></div>)}</div><button className="button button-primary" onClick={()=>setShowPreview(false)}>Back to editing</button></div></div>}
@@ -985,7 +947,7 @@ function LessonOutput({lesson,language,rate,onRateChange}:{lesson:LessonResponse
       if(!chunk){setSpeaking(false);setActiveRange(null);return;}
       const utterance=new SpeechSynthesisUtterance(chunk.text);utterance.rate=rate;utterance.lang=voice?.lang||wanted;if(voice)utterance.voice=voice;
       utterance.onstart=()=>{setSpeaking(true);setActiveRange({start:chunk.start,end:chunk.end});};
-      utterance.onend=()=>{if(speechRun.current!==run)return;setSpeaking(false);index+=1;window.setTimeout(readNext,80);};
+      utterance.onend=()=>{if(speechRun.current!==run)return;setSpeaking(false);index+=1;window.setTimeout(readNext,180);};
       utterance.onerror=()=>{if(speechRun.current===run){setSpeaking(false);setActiveRange(null);}};
       window.speechSynthesis.speak(utterance);
     };
@@ -993,13 +955,14 @@ function LessonOutput({lesson,language,rate,onRateChange}:{lesson:LessonResponse
   };
   const highlighted=(text:string,offset:number)=>Array.from(text.matchAll(/\S+|\s+/g)).map((match,index)=>{
     const word=match[0],start=offset+(match.index||0),end=start+word.length;
-    return /^\s+$/.test(word)?<span key={`${offset}-${index}`}>{word}</span>:<span key={`${offset}-${index}`} className={`speech-word ${activeRange&&start<activeRange.end&&end>activeRange.start?'active':''}`}>{word}</span>;
+    const isAct=activeRange&&start<activeRange.end&&end>activeRange.start;
+    return /^\s+$/.test(word)?<span key={`${offset}-${index}`}>{word}</span>:<span key={`${offset}-${index}`} className={`speech-word ${isAct?'active':''}`}>{word}</span>;
   });
   const titleEnd=lesson.title.length;
-   return <div className="lesson-output"><h2>{highlighted(lesson.title,0)}</h2><div className="lesson-copy">{lesson.explanation.split(/\n+/).filter(Boolean).map((p,i)=>{
+   return <div className="lesson-output"><div className="lesson-header-row"><h2>{highlighted(lesson.title,0)}</h2><div className={`voice-visualizer ${speaking?'active':''}`} aria-label={speaking?'AI is speaking':'AI is silent'}>{Array.from({length:16},(_,i)=><i key={i}/>)}</div></div><div className="lesson-copy">{lesson.explanation.split(/\n+/).filter(Boolean).map((p,i)=>{
     const prior=lesson.explanation.split(/\n+/).filter(Boolean).slice(0,i).join('\n').length+i;
     return <p key={i}>{highlighted(p,titleEnd+2+prior)}</p>;
-   })}</div>{lesson.keyPoints.length>0&&<div className="key-points"><h3>Keep these in mind</h3>{lesson.keyPoints.map((point,i)=><div key={i}><span>{String(i+1).padStart(2,'0')}</span>{point}</div>)}</div>}{lesson.followUpQuestions.length>0&&<div className="followups"><h3>Try asking next</h3>{lesson.followUpQuestions.map((q,i)=><p key={i}><ArrowRight size={13}/>{q}</p>)}</div>}<div className="speech-controls"><button className="button button-subtle" onClick={say}>{speaking?'Stop reading':'Listen to explanation'}</button><div className={`voice-visualizer ${speaking?'active':''}`} aria-label={speaking?'AI is speaking':'AI is silent'}>{Array.from({length:16},(_,i)=><i key={i}/>)}</div><label className="voice-choice">Speech voice<select value={selectedVoice} onChange={event=>setSelectedVoice(event.target.value)}><option value="">Automatic · {language}</option>{voices.map(item=><option key={item.voiceURI} value={item.voiceURI}>{item.name} · {item.lang}</option>)}</select></label><label>Speaking speed <b>{rate.toFixed(1)}×</b><input type="range" min=".5" max="1.5" step=".1" value={rate} onChange={event=>onRateChange(Number(event.target.value))}/></label><small>{voice?`Voice: ${voice.name}`:'Browser speech voices are available when supported'}</small></div></div>;
+   })}</div>{lesson.keyPoints.length>0&&<div className="key-points"><h3>Keep these in mind</h3>{lesson.keyPoints.map((point,i)=><div key={i}><span>{String(i+1).padStart(2,'0')}</span>{point}</div>)}</div>}{lesson.followUpQuestions.length>0&&<div className="followups"><h3>Try asking next</h3>{lesson.followUpQuestions.map((q,i)=><p key={i}><ArrowRight size={13}/>{q}</p>)}</div>}<div className="speech-controls"><button className={`button ${speaking?'button-primary':'button-subtle'}`} onClick={say}>{speaking?'■ Stop reading':'▶ Listen to teacher explanation'}</button><label className="voice-choice">Speech voice<select value={selectedVoice} onChange={event=>setSelectedVoice(event.target.value)}><option value="">Automatic · {language}</option>{voices.map(item=><option key={item.voiceURI} value={item.voiceURI}>{item.name} · {item.lang}</option>)}</select></label><label>Teacher speed <b>{rate.toFixed(1)}×</b><input type="range" min=".5" max="1.5" step=".1" value={rate} onChange={event=>onRateChange(Number(event.target.value))}/></label><small>{speaking?'Teacher reading 2-3 words dictation…':voice?`Voice: ${voice.name}`:'Speech voices available in your browser'}</small></div></div>;
 }
 function UserAvatar({photo,initials,className=''}:{photo?:string|null;initials:string;className?:string}) {
   return <span className={`avatar ${className}`}>{photo?<img src={photo} alt="" aria-hidden="true"/>:initials}</span>;
@@ -1012,7 +975,49 @@ function Dashboard({summary,loading,activities,userName,profilePhoto,onNavigate}
 function PreviewBox({label,file,url,rotation,mimeType,zoom=1}:{label:string;file:File;url:string;rotation:number;mimeType?:string;zoom?:number}) {const type=mimeType||file.type;return <div className="preview-box"><div className="preview-box-head"><b>{label}</b><span>{type==='application/pdf'?'PDF':type.split('/')[1]?.toUpperCase()||'FILE'}</span></div><div className="preview-canvas">{url?(type==='application/pdf'?<iframe src={url} title={`${label} ${file.name}`} style={{transform:`scale(${zoom})`}}/>:<img src={url} alt={`${label}: ${file.name}`} style={{transform:`rotate(${rotation}deg) scale(${zoom})`}}/>):<div className="preview-empty"><FileImage size={21}/><span>Processed preview appears here</span></div>}</div><small>{label==='Original'?file.name:(url?'Created in this session':'Not processed yet')}</small></div>}
 function QuizDocumentPreview({file,url,quiz,open}:{file:File;url:string;quiz:QuizAnalysis;open:boolean}) {const isPublic=/^https?:\/\//i.test(url);return <details className="quiz-source-preview" open={open}><summary><FileText size={15}/><span>{isPublic?'Public quiz source':'Uploaded quiz source'} · {quiz.totalQuestions} questions</span><ChevronDown size={14}/></summary><div className="quiz-source-frame">{isPublic?<iframe src={url} title={`Public quiz source ${url}`} sandbox="allow-forms allow-scripts" referrerPolicy="no-referrer"/>:file.type==='application/pdf'?<iframe src={url} title={`Uploaded quiz ${file.name}`}/>:file.type.startsWith('image/')?<img src={url} alt={`Uploaded quiz ${file.name}`}/>:<p>{file.name} · Question text was extracted for practice.</p>}</div></details>}
 function QuizAttemptSummary({quiz,attempt}:{quiz:QuizAnalysis;attempt:QuizAttempt}) {return <div className="attempt-summary"><span className="eyebrow">ATTEMPT SUBMITTED</span><h2>{attempt.score} / {attempt.totalQuestions} correct</h2><p>Submitted after {attempt.timeSpentSeconds} seconds. Review the AI-marked answers below.</p><div className="attempt-outcomes">{attempt.outcomes.map(outcome=>{const q=quiz.questions[outcome.questionIndex];return <div key={outcome.questionIndex} className={outcome.isCorrect?'correct':'incorrect'}><span>{outcome.isCorrect?<CheckCircle2 size={15}/>:<X size={15}/>}</span><b>Q{outcome.questionIndex+1}</b><p>{q?.question||'Question'}</p><small>{outcome.isCorrect?'Marked correct':'Marked incorrect'} · {q?.options[outcome.selectedIndex]||'—'}</small></div>;})}</div></div>}
-function QuizQuestionCard({quiz,index,selected,setSelected,feedback,onCheck,onNext,checking,submitting,results}:{quiz:QuizAnalysis;index:number;selected:number|null;setSelected:(v:number)=>void;feedback:string;onCheck:()=>void;onNext:()=>void;checking:boolean;submitting:boolean;results:{index:number;selected:number;correct:boolean}[]}) {const q=quiz.questions[index];const answered=results.some(r=>r.index===index);return <div className="active-question"><div className="question-meta"><span>QUESTION {String(index+1).padStart(2,'0')} <i>/ {quiz.questions.length}</i></span><span className="topic-pill">{q.topic||quiz.subject||'Practice'}</span></div><div className="question-progress"><span style={{width:`${((index+1)/quiz.questions.length)*100}%`}}/></div><h2>{q.question}</h2><div className="answer-list">{q.options.map((option,i)=><button className={`answer-option ${selected===i?'chosen':''}`} disabled={answered} key={i} onClick={()=>setSelected(i)}><span>{String.fromCharCode(65+i)}</span>{option}{answered&&selected===i&&(results.find(r=>r.index===index)?.correct?<CheckCircle2 size={16}/>:<X size={16}/>)}</button>)}</div>{feedback&&<div className="answer-feedback">{feedback}</div>}<div className="question-footer"><span>{results.length} answered</span>{answered?<button className="button button-primary" onClick={onNext} disabled={submitting}>{index===quiz.questions.length-1?'Finish practice':'Next question'}<ArrowRight size={15}/></button>:<button className="button button-primary" onClick={onCheck} disabled={selected===null||checking}>{checking?'Checking…':'Check answer'}<Check size={15}/></button>}</div></div>}
+function QuizQuestionsOverview({quiz,onBegin,onAutoSolve,submitting}:{quiz:QuizAnalysis;onBegin:()=>void;onAutoSolve:()=>void;submitting:boolean}) {
+  return <div className="quiz-overview-card">
+    <div className="quiz-overview-header">
+      <span className="eyebrow">QUIZ LOADED · {quiz.totalQuestions} QUESTIONS</span>
+      <h2>{quiz.fileName}</h2>
+      <p>{quiz.subject || 'Practice'} · All questions detected from your file</p>
+    </div>
+    <div className="quiz-overview-actions">
+      <button className="button button-primary" onClick={onBegin} disabled={submitting}><Play size={15}/> Start Practice</button>
+      <button className="button button-subtle" onClick={onAutoSolve} disabled={submitting || quiz.questions.some(q=>q.options.length<2)}><Sparkles size={15}/> Auto Solve All</button>
+    </div>
+    <div className="quiz-questions-list">
+      <h3>Detected Questions ({quiz.totalQuestions})</h3>
+      {quiz.questions.map((q,idx)=><div key={idx} className="quiz-preview-item">
+        <span className="preview-q-num">Q{idx+1}</span>
+        <div className="preview-q-content">
+          <p className="preview-q-text">{q.question}</p>
+          <div className="preview-options-grid">
+            {q.options.map((opt,oIdx)=><span key={oIdx} className="preview-option-chip"><b>{String.fromCharCode(65+oIdx)}.</b> {opt}</span>)}
+          </div>
+        </div>
+      </div>)}
+    </div>
+  </div>;
+}
+
+function QuizQuestionCard({quiz,index,selected,setSelected,feedback,onCheck,onNext,checking,submitting,results,onAskAi}:{quiz:QuizAnalysis;index:number;selected:number|null;setSelected:(v:number)=>void;feedback:string;onCheck:()=>void;onNext:()=>void;checking:boolean;submitting:boolean;results:{index:number;selected:number;correct:boolean}[];onAskAi?:(prompt:string)=>void}) {
+  const q=quiz.questions[index];
+  const answeredResult=results.find(r=>r.index===index);
+  const answered=answeredResult!==undefined;
+  const isWrong=answered && !answeredResult.correct;
+  return <div className="active-question">
+    <div className="question-meta"><span>QUESTION {String(index+1).padStart(2,'0')} <i>/ {quiz.questions.length}</i></span><span className="topic-pill">{q.topic||quiz.subject||'Practice'}</span></div>
+    <div className="question-progress"><span style={{width:`${((index+1)/quiz.questions.length)*100}%`}}/></div>
+    <h2>{q.question}</h2>
+    <div className="answer-list">{q.options.map((option,i)=><button className={`answer-option ${selected===i?'chosen':''}`} disabled={answered} key={i} onClick={()=>setSelected(i)}><span>{String.fromCharCode(65+i)}</span>{option}{answered&&selected===i&&(results.find(r=>r.index===index)?.correct?<CheckCircle2 size={16}/>:<X size={16}/>)}</button>)}</div>
+    {feedback&&<div className={`answer-feedback ${isWrong?'feedback-incorrect':'feedback-correct'}`}>{feedback}</div>}
+    {isWrong&&onAskAi&&<button type="button" className="button button-subtle quiz-solve-btn" onClick={()=>{
+      onAskAi(`Please solve this question step-by-step and explain the correct answer:\nQuestion: "${q.question}"\nOptions:\n${q.options.map((o,i)=>`${String.fromCharCode(65+i)}. ${o}`).join('\n')}`);
+    }}><Brain size={15}/> 🤖 Ask AI Chatbot to solve this question step-by-step</button>}
+    <div className="question-footer"><span>{results.length} answered</span>{answered?<button className="button button-primary" onClick={onNext} disabled={submitting}>{index===quiz.questions.length-1?'Finish practice':'Next question'}<ArrowRight size={15}/></button>:<button className="button button-primary" onClick={onCheck} disabled={selected===null||checking}>{checking?'Checking…':'Check answer'}<Check size={15}/></button>}</div>
+  </div>;
+}
 
 function App() { return <QueryClientProvider client={client}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/,'')}><Switch><Route path="/" component={AppContent}/><Route path="/login" component={AppContent}/><Route path="/register" component={AppContent}/><Route component={()=><div className="not-found"><GraduationCap size={24}/><h1>Page not found</h1><p>This workspace page doesn’t exist.</p><Link href="/" className="button button-primary">Return to workspace</Link></div>}/></Switch></WouterRouter></QueryClientProvider>; }
 export default App;
