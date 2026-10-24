@@ -4,7 +4,7 @@ const GEMINI_MODEL = "gemini-3.8-flash";
 
 export class GeminiConfigurationError extends Error {
   constructor() {
-    super("Gemini is not configured. Add GEMINI_API_KEY in Replit Secrets.");
+    super("Gemini is not configured. Please set the GEMINI_API_KEY environment variable.");
     this.name = "GeminiConfigurationError";
   }
 }
