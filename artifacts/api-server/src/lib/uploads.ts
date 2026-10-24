@@ -1,4 +1,5 @@
 import path from "node:path";
+import zlib from "node:zlib";
 import multer, { type FileFilterCallback } from "multer";
 import type { NextFunction, Request, Response } from "express";
 import mammoth from "mammoth";
@@ -123,14 +124,34 @@ export async function extractDocumentText(file: UploadedDocument): Promise<strin
     let localExtracted = "";
     if (file.extension === ".pdf") {
       const raw = file.buffer.toString("latin1");
-      const matches = raw.match(/\(([^()]+)\)\s*Tj/g) || raw.match(/\[([^\[\]]+)\]\s*TJ/g);
-      if (matches && matches.length > 0) {
-        const words = matches
-          .map((m) => m.replace(/[()\[\]]|Tj|TJ/g, "").trim())
-          .filter((w) => w.length > 1);
-        if (words.length > 5) {
-          localExtracted = words.join(" ");
+      const words: string[] = [];
+      const directMatches = raw.match(/\(([^()]+)\)\s*Tj/g) || raw.match(/\[([^\[\]]+)\]\s*TJ/g);
+      if (directMatches) {
+        for (const m of directMatches) {
+          const w = m.replace(/[()\[\]]|Tj|TJ/g, "").trim();
+          if (w.length > 0) words.push(w);
         }
+      }
+
+      // Decompress FlateDecode streams
+      const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
+      let sMatch: RegExpExecArray | null;
+      while ((sMatch = streamRegex.exec(raw)) !== null) {
+        try {
+          const streamBuf = Buffer.from(sMatch[1], "latin1");
+          const decompressed = zlib.inflateSync(streamBuf).toString("latin1");
+          const streamTj = decompressed.match(/\(([^()]+)\)\s*Tj/g) || decompressed.match(/\[([^\[\]]+)\]\s*TJ/g);
+          if (streamTj) {
+            for (const m of streamTj) {
+              const w = m.replace(/[()\[\]]|Tj|TJ/g, "").trim();
+              if (w.length > 0) words.push(w);
+            }
+          }
+        } catch {}
+      }
+
+      if (words.length > 5) {
+        localExtracted = words.join(" ");
       }
     }
 

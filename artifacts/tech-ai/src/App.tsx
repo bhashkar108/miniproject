@@ -265,6 +265,7 @@ function AppContent() {
   const [processedBlob, setProcessedBlob] = useState<Blob|null>(null);
   const [processedType, setProcessedType] = useState('');
   const [processedSize, setProcessedSize] = useState<number|null>(null);
+  const [processedFullscreen, setProcessedFullscreen] = useState(false);
   const [processingDoc, setProcessingDoc] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [cropPercent, setCropPercent] = useState(0);
@@ -543,7 +544,22 @@ function AppContent() {
     if(!question)return;
     if(!customPrompt) setQuizChatText('');
     setQuizChatMessages(previous=>[...previous,{role:'user',text:question}]);
-     askQuiz.mutate({data:{quizId:quiz.quizId,question}},{onSuccess:result=>setQuizChatMessages(previous=>[...previous,{role:'assistant',text:result.answer}]),onError:error=>{const detail=(error as Error)?.message||'The quiz service is unavailable.';uploadError(error);setQuizChatMessages(previous=>[...previous,{role:'assistant',text:`I could not answer that request. ${detail} You can still review the detected questions and your answers here.`}]);}});
+    setTimeout(() => {
+      document.getElementById('quiz-chat-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+    askQuiz.mutate({data:{quizId:quiz.quizId,question}},{
+      onSuccess:result=>{
+        setQuizChatMessages(previous=>[...previous,{role:'assistant',text:result.answer}]);
+        setTimeout(() => {
+          document.getElementById('quiz-chat-bottom')?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      },
+      onError:error=>{
+        const detail=(error as Error)?.message||'The quiz service is unavailable.';
+        uploadError(error);
+        setQuizChatMessages(previous=>[...previous,{role:'assistant',text:`I could not answer that request. ${detail} You can still review the detected questions and your answers here.`}]);
+      }
+    });
   };
   const beginQuiz = () => {
     setSubmittedAttempt(null);setQuizStarted(Date.now());setQuizRunMode('practice');setQuizSecondsLeft(timeLimit);timerExpiryRef.current=false;setAttemptResults([]);setQuestionIndex(0);setSelectedAnswer(null);setAnswerFeedback('');
@@ -659,8 +675,20 @@ function AppContent() {
         addProgress('document',docFile.name,`Processed ${pageCount} PDF ${pageCount===1?'page':'pages'}; original retained`,1);
         setMessage(outputFormat==='application/pdf'?'A rotated, compressed PDF copy is ready. The original is unchanged.':'An image copy of the first PDF page is ready; choose PDF to keep every page.');
       }else{
-        const image=new Image();image.src=docUrl;
-        await new Promise<void>((resolve,reject)=>{image.onload=()=>resolve();image.onerror=()=>reject(new Error('Unable to read this image.'));});
+        const image = new Image();
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            if (image.naturalWidth > 0) resolve();
+            else reject(new Error('Image loading timed out.'));
+          }, 3500);
+          image.onload = () => { clearTimeout(timer); resolve(); };
+          image.onerror = () => { clearTimeout(timer); reject(new Error('Unable to read this image.')); };
+          image.src = docUrl;
+          if (image.complete && image.naturalWidth > 0) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
         const maxSize=2400,scale=Math.min(1,maxSize/Math.max(image.width,image.height));
         const width=Math.round(image.width*scale),height=Math.round(image.height*scale),swap=Math.abs(rotationOverride)%180===90;
         const canvas=document.createElement('canvas');canvas.width=swap?height:width;canvas.height=swap?width:height;
@@ -831,7 +859,7 @@ function AppContent() {
                {docFile&&<><label className="field-label">Convert copy to<select value={outputFormat} onChange={e=>setOutputFormat(e.target.value)}><option value="application/pdf">PDF</option><option value="image/png">PNG</option><option value="image/jpeg">JPG / JPEG</option></select></label><label className="field-label crop-control">Crop edges <span>{cropPercent}% · applied on all sides</span><input type="range" min="0" max="18" step="1" value={cropPercent} onChange={e=>setCropPercent(Number(e.target.value))}/><small>Adjust crop, then click "Create processed copy" to update.</small></label><div className="compress-control"><label>File size target <b>{targetSizeKb<1024?`${targetSizeKb} KB`:`${(targetSizeKb/1024).toFixed(2)} MB`}</b></label><input type="range" min="5" max={Math.max(250,Math.ceil(docFile.size/1024*2))} step="5" value={Math.min(targetSizeKb,Math.max(250,Math.ceil(docFile.size/1024*2)))} onChange={e=>setTargetSizeKb(Number(e.target.value))}/><small>Original: {fileSizeLabel(docFile.size)} · left reduces the copy size, right allows a larger copy</small></div>{processedSize!==null&&<div className="size-comparison-row"><span className="size-before">Original: <b>{fileSizeLabel(docFile.size)}</b></span><span className="size-arrow">➔</span><span className="size-after">Processed: <b>{fileSizeLabel(processedSize)}</b></span><span className={`size-delta ${processedSize<=docFile.size?'size-saved':'size-larger'}`}>{processedSize<=docFile.size?`${Math.round((1-processedSize/docFile.size)*100)}% smaller (${fileSizeLabel(docFile.size-processedSize)} saved)`:`${Math.round((processedSize/docFile.size-1)*100)}% larger`}</span></div>}</>}
               <p className="privacy-note"><ShieldCheck size={14}/>{t('Processing stays in your browser. PDF copies are rasterized; selectable text may not be preserved.')}</p>
             </div>
-             <div className="panel compare-panel"><div className="compare-header"><div><span className="eyebrow">{t('DOCUMENT PREVIEW')}</span><h2>{docFile?.name||t('Your document, side by side')}</h2></div>{docFile&&<div className="doc-zoom-tools"><span className="local-badge">{t('LOCAL PREVIEW')}</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.max(.5,+(value-.1).toFixed(1)))} aria-label="Zoom out" disabled={docZoom<=.5}><ZoomOut size={15}/></button><span>{Math.round(docZoom*100)}%</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.min(1.8,+(value+.1).toFixed(1)))} aria-label="Zoom in" disabled={docZoom>=1.8}><ZoomIn size={15}/></button></div>}</div>{docFile?<div className="compare-grid"><PreviewBox label={t('Original')} file={docFile} url={docUrl} rotation={0} zoom={docZoom}/><PreviewBox label={t('Processed copy')} file={docFile} url={processedUrl} rotation={0} mimeType={processedType} zoom={docZoom}/></div>:<EmptyState icon={<FileImage size={22}/>} title={t('Your document goes here')} body={t('Select or capture an actual file to see its original and processed previews side by side.')}/ >}{processedUrl&&<div className="processed-size-note"><span>Processed copy size: <b>{processedSize===null?'Preparing…':fileSizeLabel(processedSize)}</b></span>{docFile&&<span className="original-compare-label"> (Original: {fileSizeLabel(docFile.size)})</span>}</div>}{processedUrl&&<div className="form-footer"><span className="privacy-note">Actual output size shown above</span><a className="button button-subtle" href={processedUrl} download={`processed-${docFile?.name.replace(/\.[^.]+$/,'')||'document'}.${processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg'}`}><Download size={15}/>{t('Download copy')}</a><button className="button button-primary" onClick={useProcessedInForm}><FilePlus2 size={15}/>Use in Form Assistant</button></div>}</div>
+             <div className="panel compare-panel"><div className="compare-header"><div><span className="eyebrow">{t('DOCUMENT PREVIEW')}</span><h2>{docFile?.name||t('Your document, side by side')}</h2></div>{docFile&&<div className="doc-zoom-tools"><span className="local-badge">{t('LOCAL PREVIEW')}</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.max(.5,+(value-.1).toFixed(1)))} aria-label="Zoom out" disabled={docZoom<=.5}><ZoomOut size={15}/></button><span>{Math.round(docZoom*100)}%</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.min(1.8,+(value+.1).toFixed(1)))} aria-label="Zoom in" disabled={docZoom>=1.8}><ZoomIn size={15}/></button></div>}</div>{docFile?<div className="compare-grid"><PreviewBox label={t('Original')} file={docFile} url={docUrl} rotation={0} zoom={docZoom}/><PreviewBox label={t('Processed copy')} file={docFile} url={processedUrl} rotation={0} mimeType={processedType} zoom={docZoom}/></div>:<EmptyState icon={<FileImage size={22}/>} title={t('Your document goes here')} body={t('Select or capture an actual file to see its original and processed previews side by side.')}/ >}{processedUrl&&<div className="processed-size-note"><span>Processed copy size: <b>{processedSize===null?'Preparing…':fileSizeLabel(processedSize)}</b></span>{docFile&&<span className="original-compare-label"> (Original: {fileSizeLabel(docFile.size)})</span>}</div>}{processedUrl&&<div className="form-footer"><span className="privacy-note">Actual output size shown above</span><button type="button" className="button button-subtle" onClick={()=>setProcessedFullscreen(true)} title="View processed copy in full screen"><Maximize2 size={15}/>{t('Full screen')}</button><a className="button button-subtle" href={processedUrl} download={`processed-${docFile?.name.replace(/\.[^.]+$/,'')||'document'}.${processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg'}`}><Download size={15}/>{t('Download copy')}</a><button className="button button-primary" onClick={useProcessedInForm}><FilePlus2 size={15}/>Use in Form Assistant</button></div>}</div>
           </div>
         </section>}
         {module==='equations'&&<section className="page-section"><PageHeading eyebrow={t('EXPLORE THE SHAPE OF AN EQUATION')} title={t('Equation graph')} subtitle={t('Enter a function of x and explore its curve. Try common Math functions such as sin(x), x*x, exp(-x*x), or sqrt(abs(x)).')}/><div className="equation-layout"><div className="panel equation-controls"><div className="panel-heading"><span className="heading-icon violet"><Sigma size={19}/></span><div><h2>{t('Your function')}</h2><p>{t('Graph updates as you type')}</p></div></div><label className="field-label">y = f(x) or x = c<input value={equation} onChange={e=>setEquation(e.target.value)} placeholder="e.g. sin(x) or x=0" className="equation-input" data-testid="input-equation"/></label><label className="field-label">Second equation <span className="field-hint">Optional · compare two local plots</span><input value={secondEquation} onChange={e=>setSecondEquation(e.target.value)} placeholder="e.g. cos(x) or x=2" className="equation-input" data-testid="input-equation-second"/></label><label className="button button-subtle file-button equation-ocr">{recognizeEquation.isPending?<LoaderCircle size={15} className="spin"/>:<Upload size={15}/>} {t('Read equations from an image or PDF')}<input type="file" accept="image/*,.pdf" onChange={event=>recognizeEquationImage(event.target.files?.[0])} data-testid="input-equation-ocr"/></label>{detectedEquations.length>0&&<div className="detected-equations"><span>{t('Detected equations')}</span>{detectedEquations.map((item,index)=><button type="button" key={`${index}-${item}`} onClick={()=>index===0?setEquation(item):setSecondEquation(item)}>{item}</button>)}</div>}<div className="equation-chips"><span>{t('Try')}</span>{['sin(x)','x*x','cos(x)','sqrt(abs(x))','x=0'].map(item=><button key={item} onClick={()=>setEquation(item)}>{item}</button>)}</div><label className="field-label">{t('Horizontal range')} <span className="range-value">−{graphRange} to {graphRange}</span><input type="range" min="2" max="12" value={graphRange} onChange={e=>setGraphRange(Number(e.target.value))} data-testid="input-graph-range"/></label><div className="equation-note"><CircleHelp size={15}/><span>{t('Use x and common math functions. Expression parsing is restricted and runs locally in your browser.')}</span></div></div><div className="panel graph-panel"><div className="graph-heading"><div><span className="eyebrow">{t('LIVE PLOT')}</span><h2>{equation || '…'}{secondEquation?`  ·  ${secondEquation}`:''}</h2></div><span className="graph-range-label">x ∈ [−{graphRange}, {graphRange}]</span></div><div className="graph-container">{graphError?<EmptyState icon={<Sigma size={21}/>} title={t('Enter a valid function')} body={t('Use supported math syntax, for example sin(x) or x*x.')}/>:<svg className="equation-graph" viewBox="0 0 560 300" role="img" aria-label={`${t('Graph of')} ${equation}${secondEquation?` and ${secondEquation}`:''}`}><g className="graph-grid">{Array.from({length:15},(_,i)=><line key={`v${i}`} x1={i*40} x2={i*40} y1="0" y2="300"/>)}{Array.from({length:9},(_,i)=><line key={`h${i}`} x1="0" x2="560" y1={i*37.5} y2={i*37.5}/>)}</g><line className="graph-axis" x1="0" x2="560" y1="150" y2="150"/><line className="graph-axis" x1="280" x2="280" y1="0" y2="300"/>{graphData.curves.map((curve,i)=>curve.valid&&<path key={i} className={`graph-curve graph-curve-${i}`} d={curve.path}/>)}{graphData.curves.flatMap((curve,i)=>curve.valid?curve.points.map((point,j)=><g key={`int-${i}-${j}`}><circle className="graph-intercept" cx={280+point.x/graphRange*280} cy={150-point.y*25} r="4"/><text className="graph-point-label" x={Math.min(495,Math.max(4,280+point.x/graphRange*280+6))} y={Math.min(290,Math.max(14,150-point.y*25-8))}>{point.label}</text></g>):[])}{graphData.intersections.map((point,i)=><g key={`cross-${i}`}><circle className="graph-crossing" cx={280+point.x/graphRange*280} cy={150-point.y*25} r="5"/><text className="graph-point-label" x={Math.min(495,280+point.x/graphRange*280+7)} y={Math.max(14,150-point.y*25-8)}>{point.label}</text></g>)}<text className="graph-label" x="535" y="143">x</text><text className="graph-label" x="288" y="14">y</text></svg>}</div><div className="graph-footer"><span><i className="curve-key"/>f(x) · intercepts and crossings</span><span>{t('Scale updates with your selected range')}</span></div></div></div></section>}
@@ -864,7 +892,41 @@ function AppContent() {
               {quiz&&submittedAttempt?<QuizAttemptSummary quiz={quiz} attempt={submittedAttempt}/>:quiz&&quizStarted!==null&&quiz.questions[questionIndex]?<QuizQuestionCard quiz={quiz} index={questionIndex} selected={selectedAnswer} setSelected={setSelectedAnswer} feedback={answerFeedback} onCheck={checkAnswer} onNext={nextQuestion} checking={solveQuestion.isPending} submitting={submitAttempt.isPending} results={attemptResults} onAskAi={(prompt)=>askAboutQuiz(prompt)}/>:quiz?<QuizQuestionsOverview quiz={quiz} onBegin={beginQuiz} onAutoSolve={autoSolveAll} submitting={submitAttempt.isPending}/>:<EmptyState icon={<Brain size={22}/>} title="Your quiz practice appears here" body="Upload a real quiz to inspect every detected question, choose answers, and get question-by-question feedback."/>}
             </div>
           </div>
-          {quiz&&<div className="panel quiz-chat-panel"><div className="panel-heading"><span className="heading-icon mint"><MessageCircle size={18}/></span><div><h2>Discuss this quiz with AI</h2><p>Ask about a question, an answer, or the topic behind it.</p></div></div><div className="quiz-chat-messages" aria-live="polite">{quizChatMessages.length?quizChatMessages.map((item,index)=><div key={index} className={`quiz-chat-message ${item.role}`}><b>{item.role==='user'?'You':'AI tutor'}</b><p>{item.text}</p></div>):<p className="empty-inline">Your quiz tutor chat will appear here.</p>}{askQuiz.isPending&&<InlineLoading label="The AI tutor is answering"/>}</div><form className="quiz-chat-input" onSubmit={event=>{event.preventDefault();askAboutQuiz();}}><input value={quizChatText} onChange={event=>setQuizChatText(event.target.value)} placeholder="Ask about a quiz question…" aria-label="Ask the quiz tutor"/><button className="button button-primary" type="submit" disabled={!quizChatText.trim()||askQuiz.isPending}><Send size={15}/>Send</button></form></div>}
+          {quiz&&<div className="panel quiz-chat-panel" id="quiz-chat-panel">
+            <div className="panel-heading">
+              <span className="heading-icon mint"><MessageCircle size={19}/></span>
+              <div>
+                <h2>AI Quiz Tutor & Step-by-Step Solver</h2>
+                <p>Chat with AI to get clear formulas, step-by-step reasoning, and solutions for any question.</p>
+              </div>
+            </div>
+            <div className="quiz-chat-quick-chips">
+              <span className="quick-chips-label">Quick solve:</span>
+              <button type="button" className="quiz-chip-btn" onClick={()=>askAboutQuiz(`Please solve Question ${questionIndex+1} step-by-step, explain why the correct option is right, and explain why the other options are wrong.`)}>💡 Solve Q{questionIndex+1} step-by-step</button>
+              <button type="button" className="quiz-chip-btn" onClick={()=>askAboutQuiz("What are the core formulas and concepts required for this quiz?")}>📝 Key Formulas & Summary</button>
+              <button type="button" className="quiz-chip-btn" onClick={()=>askAboutQuiz("Give me 3 easy mnemonic tricks or shortcuts to solve questions like this in exams.")}>🎯 Exam Shortcuts & Tips</button>
+            </div>
+            <div className="quiz-chat-messages" aria-live="polite">
+              {quizChatMessages.length ? quizChatMessages.map((item,index)=>(
+                <div key={index} className={`quiz-chat-message ${item.role}`}>
+                  <b>{item.role==='user'?'Student':'AI Tutor'}</b>
+                  <p>{item.text}</p>
+                </div>
+              )) : (
+                <div className="quiz-chat-empty">
+                  <MessageCircle size={32}/>
+                  <h3>Your AI Tutor is ready to help</h3>
+                  <p>Ask to solve any question, clarify confusing concepts, or click one of the quick buttons above.</p>
+                </div>
+              )}
+              {askQuiz.isPending&&<InlineLoading label="AI tutor is thinking and drafting the step-by-step solution…"/>}
+              <div id="quiz-chat-bottom"/>
+            </div>
+            <form className="quiz-chat-input" onSubmit={event=>{event.preventDefault();askAboutQuiz();}}>
+              <input value={quizChatText} onChange={event=>setQuizChatText(event.target.value)} placeholder="Type question, e.g. 'Solve Q2', 'Why is option B correct?'…" aria-label="Ask the quiz tutor"/>
+              <button className="button button-primary" type="submit" disabled={!quizChatText.trim()||askQuiz.isPending}><Send size={15}/>Ask AI</button>
+            </form>
+          </div>}
           <div className="panel history-panel"><div className="panel-heading"><span className="heading-icon muted-icon"><Clock3 size={18}/></span><div><h2>Practice history</h2><p>Attempts from your account</p></div></div>{attemptsQuery.isLoading?<InlineLoading label="Loading practice history"/>:attemptsQuery.data?.length?<div className="history-list">{attemptsQuery.data.slice(0,6).map(attempt=><div className="history-row" key={attempt.id}><span className="history-symbol"><Brain size={15}/></span><span className="history-title"><b>{attempt.quizName}</b><small>{attempt.subject} · {new Date(attempt.createdAt).toLocaleDateString()}</small></span><span className="history-score">{attempt.score}<small>/{attempt.totalQuestions}</small></span></div>)}</div>:<p className="empty-inline">Your submitted quiz attempts will show here.</p>}</div>
         </section>}
          {module==='progress'&&<section className="page-section">
@@ -898,6 +960,7 @@ function AppContent() {
       </main>
     </div>
     {showPreview&&form&&<div className="modal-backdrop" onClick={()=>setShowPreview(false)}><div className="preview-modal" onClick={e=>e.stopPropagation()}><button className="icon-button modal-close" onClick={()=>setShowPreview(false)} aria-label="Close preview"><X size={17}/></button><span className="eyebrow">FORM REVIEW PREVIEW</span><h2>{form.title}</h2><p className="muted-copy">{form.fileName} · {form.fields.length} detected fields</p><div className="preview-values">{form.fields.map(field=><div key={field.id}><b>{field.label}</b><span>{formValues[field.id]||'Not provided'}</span></div>)}</div><button className="button button-primary" onClick={()=>setShowPreview(false)}>Back to editing</button></div></div>}
+    {processedFullscreen&&processedUrl&&<div className="modal-backdrop processed-fs-backdrop" onClick={()=>setProcessedFullscreen(false)}><div className="preview-modal processed-fs-modal" onClick={e=>e.stopPropagation()}><div className="modal-header-row"><div><span className="eyebrow">FULL SCREEN PREVIEW</span><h2>{docFile?.name||'Processed Copy'}</h2>{processedSize!==null&&<span className="modal-size-tag">Output size: {fileSizeLabel(processedSize)}</span>}</div><button className="icon-button modal-close" onClick={()=>setProcessedFullscreen(false)} aria-label="Close preview"><X size={17}/></button></div><div className="fullscreen-doc-container">{processedType==='application/pdf'?<iframe src={processedUrl} title="Processed PDF" className="fullscreen-preview-frame"/>:<img src={processedUrl} alt="Processed Copy" className="fullscreen-preview-img"/>}</div><div className="modal-actions-row"><a className="button button-subtle" href={processedUrl} download={`processed-${docFile?.name.replace(/\.[^.]+$/,'')||'document'}.${processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg'}`}><Download size={15}/>Download copy</a><button className="button button-primary" onClick={()=>setProcessedFullscreen(false)}>Close preview</button></div></div></div>}
   </div>;
 }
 
