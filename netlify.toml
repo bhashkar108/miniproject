@@ -1,0 +1,14 @@
+[build]
+  command = "npm install -g pnpm && pnpm install --frozen-lockfile && cd artifacts/tech-ai && pnpm run build"
+  publish = "artifacts/tech-ai/dist/public"
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://techai-api.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
