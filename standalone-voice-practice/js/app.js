@@ -785,6 +785,23 @@ Cette question vous invite à vous exprimer simplement avec des exemples concret
     // Top buttons
     if ($('topicBtn')) $('topicBtn').onclick = openTopicPicker;
     if ($('topicQuickBtn')) $('topicQuickBtn').onclick = openTopicPicker;
+    if ($('nextQuestionBtn')) {
+      $('nextQuestionBtn').onclick = () => {
+        const pool = [
+          'What do you usually like to do in your free time?',
+          'What time do you usually wake up every morning?',
+          'How do you manage your daily routine to stay productive throughout the day?',
+          'In our fast-paced society, how do you maintain a healthy equilibrium between your ambitions and well-being?',
+          'What is a new skill or project you are currently working on in college?'
+        ];
+        const nextQ = pool[Math.floor(Math.random() * pool.length)];
+        lastAIReply = nextQ;
+        currentQuestion = nextQ;
+        addMessage('ai', `🎲 Next Question (${level}):\n\n${nextQ}`);
+        updateSuggestionBox();
+        speak(nextQ);
+      };
+    }
 
     if ($('translateBtn')) {
       $('translateBtn').onclick = () => explainInLanguage(lastAIReply);

@@ -338,16 +338,24 @@ button:active {
 
 /* Orb Active States */
 .orb-wrap.speaking .orb-wave {
-  animation: wave 1.4s ease-out infinite;
+  animation: wave 1.2s cubic-bezier(0.1, 0.6, 0.4, 1) infinite;
 }
 
 .orb-wrap.speaking .orb {
-  animation: orbPulse 0.9s ease-in-out infinite alternate;
-  filter: brightness(1.15);
+  animation: orbSwirl 3.2s ease-in-out infinite alternate, liquidGlow 2.4s ease-in-out infinite alternate;
+  filter: brightness(1.22) drop-shadow(0 0 25px rgba(56, 189, 248, 0.65));
+}
+
+.orb-wrap.speaking .orb:before {
+  animation: skyspin 3.5s linear infinite;
+  opacity: 0.95;
 }
 
 .orb-wrap.listening .orb-wave {
-  opacity: 0.8;
+  opacity: 0.85;
+  border-color: #38bdf8;
+  animation: wave 1.6s ease-out infinite;
+}
   border-color: #38bdf8;
   animation: wave 1.8s ease-out infinite;
 }
@@ -982,6 +990,35 @@ button:active {
 @keyframes wave {
   0% { transform: scale(0.92); opacity: 0.8; }
   100% { transform: scale(1.24); opacity: 0; }
+}
+
+@keyframes orbSwirl {
+  0% {
+    transform: scale(1) rotate(0deg);
+    box-shadow: inset -18px -18px 40px rgba(3, 30, 50, 0.8),
+                inset 14px 12px 35px rgba(224, 247, 254, 0.85),
+                0 0 45px rgba(56, 189, 248, 0.55),
+                0 0 70px rgba(6, 182, 212, 0.35);
+  }
+  50% {
+    transform: scale(1.06) rotate(8deg);
+    box-shadow: inset -12px -12px 30px rgba(2, 44, 74, 0.75),
+                inset 20px 18px 45px rgba(224, 247, 254, 0.95),
+                0 0 65px rgba(56, 189, 248, 0.85),
+                0 0 110px rgba(14, 165, 233, 0.6);
+  }
+  100% {
+    transform: scale(1.02) rotate(-6deg);
+    box-shadow: inset -18px -18px 40px rgba(3, 30, 50, 0.8),
+                inset 14px 12px 35px rgba(224, 247, 254, 0.85),
+                0 0 50px rgba(56, 189, 248, 0.6),
+                0 0 80px rgba(6, 182, 212, 0.4);
+  }
+}
+
+@keyframes liquidGlow {
+  0%, 100% { filter: brightness(1.18) contrast(1.1); }
+  50% { filter: brightness(1.38) contrast(1.25) hue-rotate(15deg); }
 }
 
 @keyframes orbPulse {

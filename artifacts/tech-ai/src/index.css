@@ -1846,26 +1846,45 @@
   opacity: 0.95;
 }
 
-/* Orb Active States */
+/* Orb Active States - Living fluid movement like Gemini / ChatGPT */
 .orb-wrap.speaking .orb-wave {
-  animation: wave 1.4s ease-out infinite;
+  animation: wave 1.2s cubic-bezier(0.1, 0.6, 0.4, 1) infinite;
 }
 .orb-wrap.speaking .orb {
-  animation: orbPulse 0.9s ease-in-out infinite alternate;
-  filter: brightness(1.15);
+  animation: orbSwirl 3.2s ease-in-out infinite alternate, liquidGlow 2.4s ease-in-out infinite alternate;
+  filter: brightness(1.22) drop-shadow(0 0 25px rgba(56, 189, 248, 0.65));
+}
+.orb-wrap.speaking .orb:before {
+  animation: skyspin 3.5s linear infinite;
+  opacity: 0.95;
+}
+.orb-wrap.speaking .cloud {
+  animation: cloud1 2s ease-in-out infinite;
+}
+.orb-wrap.speaking .cloud.two {
+  animation: cloud2 2.5s ease-in-out infinite;
+}
+.orb-wrap.speaking .cloud.three {
+  animation: cloud1 2.2s ease-in-out infinite reverse;
+}
+.orb-wrap.speaking .orb-ring {
+  animation: ringSpin 5s linear infinite;
+}
+.orb-wrap.speaking .orb-halo {
+  animation: haloPulse 2s ease-in-out infinite alternate;
 }
 .orb-wrap.listening .orb-wave {
-  opacity: 0.8;
+  opacity: 0.85;
   border-color: #38bdf8;
-  animation: wave 1.8s ease-out infinite;
+  animation: wave 1.6s ease-out infinite;
 }
 .orb-wrap.listening .orb {
-  animation: orbPulse 1.4s ease-in-out infinite alternate;
-  filter: saturate(1.3) brightness(1.1);
+  animation: orbPulse 1.2s ease-in-out infinite alternate;
+  filter: saturate(1.4) brightness(1.15) drop-shadow(0 0 18px rgba(6, 182, 212, 0.6));
 }
 .orb-wrap.thinking .orb {
-  animation: skyspin 3s linear infinite;
-  filter: hue-rotate(45deg);
+  animation: skyspin 2.2s linear infinite, liquidGlow 1.5s ease-in-out infinite;
+  filter: hue-rotate(45deg) brightness(1.2);
 }
 
 /* Audio Bars */
@@ -2568,5 +2587,129 @@
   z-index: 10000;
   animation: rise 0.2s ease-out;
 }
+
+/* ========================================================
+   AI TEACHER LANGUAGE DROPDOWN & SELECT INPUT STYLING
+   ======================================================== */
+.teacher-lang-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 9px;
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  color-scheme: light dark;
+}
+.teacher-lang-select:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
+}
+.dark .teacher-lang-select {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+  color-scheme: dark;
+}
+.dark .teacher-lang-select option {
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 8px 12px;
+}
+
+/* ========================================================
+   KEYFRAME ANIMATIONS FOR LIVING SKY-BLUE AI ORB & EQUALIZER
+   ======================================================== */
+@keyframes skyspin {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes orbSwirl {
+  0% {
+    transform: scale(1) rotate(0deg);
+    box-shadow: inset -18px -18px 40px rgba(3, 30, 50, 0.8),
+                inset 14px 12px 35px rgba(224, 247, 254, 0.85),
+                0 0 45px rgba(56, 189, 248, 0.55),
+                0 0 70px rgba(6, 182, 212, 0.35);
+  }
+  50% {
+    transform: scale(1.06) rotate(8deg);
+    box-shadow: inset -12px -12px 30px rgba(2, 44, 74, 0.75),
+                inset 20px 18px 45px rgba(224, 247, 254, 0.95),
+                0 0 65px rgba(56, 189, 248, 0.85),
+                0 0 110px rgba(14, 165, 233, 0.6);
+  }
+  100% {
+    transform: scale(1.02) rotate(-6deg);
+    box-shadow: inset -18px -18px 40px rgba(3, 30, 50, 0.8),
+                inset 14px 12px 35px rgba(224, 247, 254, 0.85),
+                0 0 50px rgba(56, 189, 248, 0.6),
+                0 0 80px rgba(6, 182, 212, 0.4);
+  }
+}
+
+@keyframes orbPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: inset -18px -18px 40px rgba(3, 30, 50, 0.8),
+                0 0 35px rgba(56, 189, 248, 0.4);
+  }
+  100% {
+    transform: scale(1.05);
+    box-shadow: inset -14px -14px 35px rgba(2, 44, 74, 0.8),
+                0 0 60px rgba(56, 189, 248, 0.75);
+  }
+}
+
+@keyframes liquidGlow {
+  0%, 100% { filter: brightness(1.18) contrast(1.1); }
+  50% { filter: brightness(1.38) contrast(1.25) hue-rotate(15deg); }
+}
+
+@keyframes halo {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes haloPulse {
+  0% { transform: rotate(0deg) scale(1); opacity: 0.6; }
+  50% { transform: rotate(180deg) scale(1.1); opacity: 0.95; }
+  100% { transform: rotate(360deg) scale(1); opacity: 0.6; }
+}
+
+@keyframes wave {
+  0% { transform: scale(0.92); opacity: 0.95; border-color: rgba(56, 189, 248, 0.9); }
+  100% { transform: scale(1.5); opacity: 0; border-color: rgba(6, 182, 212, 0); }
+}
+
+@keyframes cloud1 {
+  0% { transform: translateX(0) translateY(0) scale(1); opacity: 0.7; }
+  50% { transform: translateX(25px) translateY(-8px) scale(1.2); opacity: 0.95; }
+  100% { transform: translateX(0) translateY(0) scale(1); opacity: 0.7; }
+}
+
+@keyframes cloud2 {
+  0% { transform: translateX(0) translateY(0) scale(0.85); opacity: 0.5; }
+  50% { transform: translateX(-28px) translateY(10px) scale(1.15); opacity: 0.85; }
+  100% { transform: translateX(0) translateY(0) scale(0.85); opacity: 0.5; }
+}
+
+@keyframes ringSpin {
+  0% { transform: rotate(0deg) scale(1); border-color: rgba(224, 247, 254, 0.5); }
+  50% { transform: rotate(180deg) scale(1.06); border-color: rgba(56, 189, 248, 0.95); }
+  100% { transform: rotate(360deg) scale(1); border-color: rgba(224, 247, 254, 0.5); }
+}
+
+@keyframes bounceBar {
+  0% { height: 4px; }
+  100% { height: 22px; }
+}
+
 
 
