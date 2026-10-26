@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TECH AI | Smart Way – Project Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(18, 25, 41, 0.75);
+      --card-border: rgba(56, 189, 248, 0.18);
+      --primary: #38bdf8;
+      --cyan: #22d3ee;
+      --mint: #34d399;
+      --violet: #a78bfa;
+      --amber: #fbbf24;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --glow: rgba(56, 189, 248, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      user-select: none;
+    }
+
+    /* Ambient Background Glow */
+    .bg-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background: 
+        radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.12) 0%, transparent 45%),
+        radial-gradient(circle at 85% 80%, rgba(34, 211, 238, 0.1) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.8) 0%, #090d16 100%);
+    }
+
+    /* Deck Container */
+    .deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 72px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(20px) scale(0.98);
+      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+
+    /* Slide Header */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .brand-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--primary);
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 6px 14px;
+      border-radius: 999px;
+    }
+
+    .slide-number {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+    }
+
+    /* Headings */
+    .slide-title-block {
+      margin-bottom: 28px;
+    }
+
+    .slide-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 38px;
+      font-weight: 700;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 40%, #bae6fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .slide-subtitle {
+      font-size: 17px;
+      color: var(--text-muted);
+      font-weight: 400;
+      max-width: 860px;
+      line-height: 1.5;
+    }
+
+    /* Content Layouts */
+    .slide-body {
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      width: 100%;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      width: 100%;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      width: 100%;
+    }
+
+    /* Cards */
+    .glass-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 24px 28px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+    }
+
+    .glass-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      opacity: 0.6;
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 16px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: var(--primary);
+    }
+
+    .card-icon.mint { background: rgba(52, 211, 153, 0.12); border-color: rgba(52, 211, 153, 0.25); color: var(--mint); }
+    .card-icon.violet { background: rgba(167, 139, 250, 0.12); border-color: rgba(167, 139, 250, 0.25); color: var(--violet); }
+    .card-icon.amber { background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.25); color: var(--amber); }
+
+    .card-title {
+      font-size: 19px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #ffffff;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .card-list {
+      list-style: none;
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .card-list li {
+      font-size: 13.5px;
+      color: #cbd5e1;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      line-height: 1.45;
+    }
+
+    .card-list li span.bullet {
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    /* Slide 1 - Welcome / Hero Slide */
+    .hero-slide {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 8px 20px;
+      border-radius: 999px;
+      margin-bottom: 24px;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+    }
+
+    .hero-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 58px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 18px;
+      background: linear-gradient(135deg, #ffffff 30%, #38bdf8 70%, #22d3ee 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      font-size: 22px;
+      color: #94a3b8;
+      font-weight: 400;
+      max-width: 820px;
+      line-height: 1.5;
+      margin-bottom: 36px;
+    }
+
+    .hero-highlights {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .hero-chip {
+      background: rgba(18, 25, 41, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hero-chip span.dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 8px var(--primary);
+    }
+
+    /* Orb Graphic Simulation */
+    .orb-preview {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #7dd3fc, #0284c7 65%, #0369a1 100%);
+      box-shadow: 0 0 45px rgba(56, 189, 248, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.4);
+      margin: 0 auto 24px;
+      animation: floatPulse 3s ease-in-out infinite;
+    }
+
+    @keyframes floatPulse {
+      0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 25px rgba(56, 189, 248, 0.4)); }
+      50% { transform: translateY(-8px) scale(1.04); filter: drop-shadow(0 0 40px rgba(34, 211, 238, 0.7)); }
+    }
+
+    /* Equalizer Bars Preview */
+    .bars-preview {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 4px;
+      height: 36px;
+      margin-top: 14px;
+    }
+
+    .bar {
+      width: 4px;
+      background: var(--primary);
+      border-radius: 4px;
+      animation: barDance 1.2s ease-in-out infinite alternate;
+    }
+
+    .bar:nth-child(2) { animation-delay: 0.1s; height: 18px; }
+    .bar:nth-child(3) { animation-delay: 0.3s; height: 26px; }
+    .bar:nth-child(4) { animation-delay: 0.2s; height: 34px; }
+    .bar:nth-child(5) { animation-delay: 0.4s; height: 20px; }
+    .bar:nth-child(6) { animation-delay: 0.15s; height: 28px; }
+
+    @keyframes barDance {
+      0% { transform: scaleY(0.3); }
+      100% { transform: scaleY(1); }
+    }
+
+    /* Slide 10 - Team Cards */
+    .team-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 18px;
+      width: 100%;
+    }
+
+    .team-card {
+      background: rgba(18, 25, 41, 0.85);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 20px 14px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: all 0.3s ease;
+    }
+
+    .team-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--primary);
+      box-shadow: 0 10px 25px rgba(56, 189, 248, 0.2);
+    }
+
+    .photo-placeholder {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1e293b, #334155);
+      border: 2px solid var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      color: #e2e8f0;
+      margin-bottom: 12px;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+    }
+
+    .member-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .member-role {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .member-tag {
+      font-size: 11px;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Slide Controls */
+    .deck-controls {
+      position: fixed;
+      bottom: 24px;
+      left: 72px;
+      right: 72px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      pointer-events: auto;
+    }
+
+    .indicators {
+      display: flex;
+      gap: 8px;
+    }
+
+    .indicator {
+      width: 28px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.15);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .indicator.active {
+      background: var(--primary);
+      width: 44px;
+      box-shadow: 0 0 10px var(--primary);
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn-nav {
+      background: rgba(18, 25, 41, 0.9);
+      border: 1px solid var(--card-border);
+      color: #f1f5f9;
+      padding: 8px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-nav:hover {
+      background: var(--primary);
+      color: #090d16;
+      border-color: var(--primary);
+    }
+
+    .btn-nav:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      border-color: rgba(255, 255, 255, 0.1);
+      background: rgba(18, 25, 41, 0.5);
+      color: #64748b;
+    }
+
+    .hint-text {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    @media print {
+      body { overflow: visible; height: auto; background: #090d16 !important; }
+      .slide { position: relative; opacity: 1 !important; transform: none !important; page-break-after: always; height: 100vh; }
+      .deck-controls { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-canvas"></div>
+
+  <div class="deck" id="deck">
+
+    <!-- SLIDE 1: WELCOME & COVER SLIDE -->
+    <section class="slide active hero-slide" data-index="1">
+      <div class="slide-header" style="justify-content: center; width: 100%;">
+        <span class="hero-badge">✦ PROJECT SHOWCASE ✦</span>
+      </div>
+      <div class="slide-body" style="flex-direction: column; justify-content: center;">
+        <div class="orb-preview"></div>
+        <h1 class="hero-title">TECH AI | SMART WAY</h1>
+        <p class="hero-subtitle">
+          Next-Generation AI Voice English Practice & Smart Student Workspace Ecosystem
+        </p>
+        <div class="hero-highlights">
+          <div class="hero-chip"><span class="dot"></span> AI Voice Visualizer Studio</div>
+          <div class="hero-chip"><span class="dot"></span> Real-Time Grammar & Hindi Guidance</div>
+          <div class="hero-chip"><span class="dot"></span> Smart Doc & Equation Visualizer</div>
+          <div class="hero-chip"><span class="dot"></span> Auto Quiz & Privacy-First Architecture</div>
+        </div>
+      </div>
+      <div style="font-size: 13px; color: #64748b; text-align: center;">
+        Presented by Tech AI Team • Modern Academic AI Solution
+      </div>
+    </section>
+
+    <!-- SLIDE 2: THE PROBLEM STATEMENT -->
+    <section class="slide" data-index="2">
+      <div class="slide-header">
+        <span class="brand-tag">Problem Statement</span>
+        <span class="slide-number">02 / 10</span>
+      </div>
+      <div class="slide-title-block">
+        <h2 class="slide-title">The Real Challenges Faced by Students Today</h2>
+        <p class="slide-subtitle">Millions of ambitious students struggle with English communication, study fragmentation, and privacy risks.</p>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="glass-card">
+            <div class="card-icon">🗣️</div>
+            <h3 class="card-title">English Speaking Anxiety</h3>
+            <p class="card-desc">Students hesitate to speak due to fear of judgement, lack of conversational partners, and zero constructive real-time feedback.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Hesitation in job interviews & vivas</li>
+              <li><span class="bullet">▪</span> Grammatical confusion without friendly explanations</li>
+              <li><span class="bullet">▪</span> Expensive spoken English institutes</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon amber">📚</div>
+            <h3 class="card-title">Scattered Study Tools</h3>
+            <p class="card-desc">Learning materials are scattered across PDF readers, quiz portals, document compressors, and generic chatbots.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Generic chatbots hallucinate without syllabus context</li>
+              <li><span class="bullet">▪</span> Manual document compression breaks file formats</li>
+              <li><span class="bullet">▪</span> Static quiz sheets without instant answer checks</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon violet">🔒</div>
+            <h3 class="card-title">Privacy & Accessibility Gaps</h3>
+            <p class="card-desc">Students are forced to upload personal documents and certificates to shady third-party web tools.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Data leakage of IDs and academic marksheets</li>
+              <li><span class="bullet">▪</span> Poor native language support (Hindi / Regional)</li>
+              <li><span class="bullet">▪</span> Rigid templates that do not respect student materials</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: THE SOLUTION -->
+    <section class="slide" data-index="3">
+      <div class="slide-header">
+        <span class="brand-tag">Proposed Solution</span>
+        <span class="slide-number">03 / 10</span>
+      </div>
+      <div class="slide-title-block">
+        <h2 class="slide-title">TECH AI | Smart Way — The Unified Ecosystem</h2>
+        <p class="slide-subtitle">A purpose-built, privacy-centric AI companion that transforms how students speak, study, and prepare documents.</p>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="glass-card">
+            <div class="card-icon">🎙️</div>
+            <h3 class="card-title">Interactive AI Voice Studio</h3>
+            <p class="card-desc">An expressive, low-latency AI conversation coach with an animated audio orb, real-time grammar suggestions, multi-level adaptation, and instant Hindi explanations.</p>
+            <ul class="card-list" style="margin-top: 18px;">
+              <li><span class="bullet">✔</span> Beginner, Intermediate & Advanced adaptive difficulty</li>
+              <li><span class="bullet">✔</span> 8 contextual conversation topics (Interviews, College, Travel)</li>
+              <li><span class="bullet">✔</span> Browser-native speech recognition & expressive TTS</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon mint">⚡</div>
+            <h3 class="card-title">Complete Academic Toolkit</h3>
+            <p class="card-desc">Five deeply integrated modules engineered to work with student's own notes and files without requiring dummy prefilled templates.</p>
+            <ul class="card-list" style="margin-top: 18px;">
+              <li><span class="bullet">✔</span> <b>AI Teacher</b>: Grounded lesson generator with dictation</li>
+              <li><span class="bullet">✔</span> <b>Smart Doc</b>: Browser-side image & PDF optimizer</li>
+              <li><span class="bullet">✔</span> <b>Equation Grapher</b>: Interactive curve & intercept solver</li>
+              <li><span class="bullet">✔</span> <b>Auto Quiz</b>: Document-to-MCQ practice & target solver</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: FEATURE 1 - AI VOICE PRACTICE -->
+    <section class="slide" data-index="4">
+      <div class="slide-header">
+        <span class="brand-tag">Core Feature</span>
+        <span class="slide-number">04 / 10</span>
+      </div>
+      <div class="slide-title-block">
+        <h2 class="slide-title">AI Voice Practice & English Studio</h2>
+        <p class="slide-subtitle">Engineered with dual-column desktop symmetry: Visualizer on LEFT and Conversation Studio on RIGHT.</p>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="glass-card" style="text-align: center; justify-content: center; align-items: center;">
+            <div class="orb-preview" style="width: 110px; height: 110px; margin-bottom: 14px;"></div>
+            <h4 style="color: #ffffff; font-size: 18px; margin-bottom: 6px;">Sky-Blue & Cyan Voice Orb</h4>
+            <p style="font-size: 13px; color: var(--text-muted); max-width: 320px;">
+              Animates only when AI speaks. Displays 6 real-time states: Speaking, Listening, Thinking, Paused, Stopped, and Idle.
+            </p>
+            <div class="bars-preview">
+              <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+              <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 18px;">
+              <span class="hero-chip" style="font-size: 11px; padding: 4px 10px;">Start / Stop</span>
+              <span class="hero-chip" style="font-size: 11px; padding: 4px 10px;">Pause / Resume</span>
+              <span class="hero-chip" style="font-size: 11px; padding: 4px 10px;">Repeat</span>
+            </div>
+          </div>
+          <div class="glass-card">
+            <h3 class="card-title">Conversation Studio Features</h3>
+            <ul class="card-list" style="gap: 12px;">
+              <li><span class="bullet">✦</span> <b>Adaptive Speaking Levels:</b> Beginner (simple sentences & gentle hints), Intermediate (natural flow), Advanced (professional vocabulary).</li>
+              <li><span class="bullet">✦</span> <b>Polite Grammar Corrections:</b> Identifies awkward phrases and shows improved versions without demoralizing the student.</li>
+              <li><span class="bullet">✦</span> <b>Hindi Explanation Tooltips:</b> Complex English phrases and corrections explained in accessible Hindi/Hinglish on demand.</li>
+              <li><span class="bullet">✦</span> <b>Favorites & Session History:</b> Save golden sentences and interview answers with one click.</li>
+              <li><span class="bullet">✦</span> <b>Responsive Behavior:</b> Left/Right desktop grid transforms smoothly to stacked vertical layout on mobile.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: FEATURE 2 - AI TEACHER -->
+    <section class="slide" data-index="5">
+      <div class="slide-header">
+        <span class="brand-tag">Study Companion</span>
+        <span class="slide-number">05 / 10</span>
+      </div>
+      <div class="slide-title-block">
+        <h2 class="slide-title">AI Teacher: Grounded Learning From Notes</h2>
+        <p class="slide-subtitle">Upload lecture slides, notes, or textbook snapshots. Learn without AI hallucination or generic internet noise.</p>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="glass-card">
+            <div class="card-icon mint">📖</div>
+            <h3 class="card-title">Bring Your Own Material</h3>
+            <p class="card-desc">Accepts PDF, DOCX, TXT, Markdown, and photos. Extracts raw text and lets students review and edit the source before asking questions.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Zero prefilled dummy notes</li>
+              <li><span class="bullet">▪</span> Direct extraction from student docs</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon">🎙️</div>
+            <h3 class="card-title">Voice Questioning & Dictation</h3>
+            <p class="card-desc">Speak your questions naturally using browser speech recognition. AI synthesizes clear, pedagogical explanations with custom playback speed.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Hands-free voice inquiry</li>
+              <li><span class="bullet">▪</span> Adjustable dictation pace (0.5x–1.5x)</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon violet">🌐</div>
+            <h3 class="card-title">Multilingual Explanations</h3>
+            <p class="card-desc">Understand tough academic topics in your mother tongue. Supports English, Hindi, Hinglish, Bengali, Tamil, Telugu, Spanish, and more.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Instant concept clarity</li>
+              <li><span class="bullet">▪</span> Key takeaways & follow-up prompts</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: FEATURE 3 - SMART DOC & EQUATION -->
+    <section class="slide" data-index="6">
+      <div class="slide-header">
+        <span class="brand-tag">Document & Math Tools</span>
+        <span class="slide-number">06 / 10</span>
+      </div>
+      <div class="slide-title-block">
+        <h2 class="slide-title">Smart Doc Studio & Equation Grapher</h2>
+        <p class="slide-subtitle">Client-side document manipulation and interactive mathematical curve exploration.</p>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="glass-card">
+            <div class="card-icon">📄</div>
+            <h3 class="card-title">Smart Doc: In-Browser Optimizer</h3>
+            <p class="card-desc">Process academic documents locally without uploading sensitive files to external cloud servers.</p>
+            <ul class="card-list" style="margin-top: 14px;">
+              <li><span class="bullet">✦</span> <b>Direct Camera Capture:</b> Full-screen document scanning with camera flash and preview.</li>
+              <li><span class="bullet">✦</span> <b>Persistent Adjustments:</b> Real-time 90° rotation, 4-sided edge cropping, and format conversion (PDF, PNG, JPEG).</li>
+              <li><span class="bullet">✦</span> <b>Target File Size Compression:</b> Dial in target KB/MB sizes for exam upload portals.</li>
+              <li><span class="bullet">✦</span> <b>Side-by-Side Comparison:</b> Compare original and processed copy with sync zoom and full-screen preview.</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon violet">📈</div>
+            <h3 class="card-title">Equation Graph Visualizer</h3>
+            <p class="card-desc">Mathematical clarity through interactive graphing and OCR handwriting recognition.</p>
+            <ul class="card-list" style="margin-top: 14px;">
+              <li><span class="bullet">✦</span> <b>Multi-Function Plotting:</b> Compare two curves simultaneously (e.g., sin(x) and cos(x)) on an SVG grid.</li>
+              <li><span class="bullet">✦</span> <b>Automatic Intercepts:</b> Computes axis intercepts, local extrema, and curve intersections in real time.</li>
+              <li><span class="bullet">✦</span> <b>Image / PDF OCR:</b> Snap a photo of handwritten equations to automatically populate graph functions.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: FEATURE 4 - AUTO QUIZ & PROGRESS -->
+    <section class="slide" data-index="7">
+      <div class="slide-header">
+        <span class="brand-tag">Assessment & Analytics</span>
+        <span class="slide-number">07 / 10</span>
+      </div>
+      <div class="slide-title-block">
+        <h2 class="slide-title">Auto Quiz Engine & Student Momentum</h2>
+        <p class="slide-subtitle">Turn test papers into interactive gamified practice tests with target score solvers.</p>
+      </div>
+      <div class="slide-body">
+        <div class="grid-3">
+          <div class="glass-card">
+            <div class="card-icon amber">🎯</div>
+            <h3 class="card-title">Worksheet to Quiz Ingestion</h3>
+            <p class="card-desc">Upload past question papers (PDF, Images, DOCX) or paste public quiz URLs. AI extracts questions, options, and question types automatically.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Preserves original document preview</li>
+              <li><span class="bullet">▪</span> Structured interactive MCQ cards</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon mint">🤖</div>
+            <h3 class="card-title">Interactive & Auto-Solve Modes</h3>
+            <p class="card-desc">Practise manually with instant answer verification or run the AI Auto-Solve mode to reach a specified target score for test review.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Instant feedback & explanations</li>
+              <li><span class="bullet">▪</span> Integrated "Chat with Quiz" AI tutor</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon">📊</div>
+            <h3 class="card-title">Personal Momentum & Analytics</h3>
+            <p class="card-desc">Track study minutes, quiz scores, and practice records across sessions. All progress is kept strictly private on the user's device.</p>
+            <ul class="card-list">
+              <li><span class="bullet">▪</span> Visual dashboard activity feed</li>
+              <li><span class="bullet">▪</span> Average practice scores & trends</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: TECH STACK & ARCHITECTURE -->
+    <section class="slide" data-index="8">
+      <div class="slide-header">
+        <span class="brand-tag">Architecture</span>
+        <span class="slide-number">08 / 10</span>
+      </div>
+      <div class="slide-title-block">
+        <h2 class="slide-title">Technology Stack & Architecture</h2>
+        <p class="slide-subtitle">Built with modern web standards, client-side speed, and robust TypeScript engineering.</p>
+      </div>
+      <div class="slide-body">
+        <div class="grid-4">
+          <div class="glass-card">
+            <div class="card-icon">⚡</div>
+            <h3 class="card-title">Frontend Core</h3>
+            <p class="card-desc">React 19, TypeScript, Vite, TailwindCSS, Lucide Icons, and Wouter for lightning-fast routing.</p>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon mint">🎙️</div>
+            <h3 class="card-title">Speech & Audio</h3>
+            <p class="card-desc">Web Speech API (Recognition + Synthesis), Web Audio API, Canvas 24-band equalizer, standalone vanilla JS bundle.</p>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon violet">📄</div>
+            <h3 class="card-title">Local Processing</h3>
+            <p class="card-desc">PDF-lib, PDF.js Worker, HTML5 Canvas API, Mathjs parser for secure client-side calculations.</p>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon amber">🛡️</div>
+            <h3 class="card-title">Backend & Privacy</h3>
+            <p class="card-desc">Node.js Express API, Argon2 encryption, SQLite / Session Auth, guest mode with local storage persistence.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9: IMPACT & ROADMAP -->
+    <section class="slide" data-index="9">
+      <div class="slide-header">
+        <span class="brand-tag">Future & Impact</span>
+        <span class="slide-number">09 / 10</span>
+      </div>
+      <div class="slide-title-block">
+        <h2 class="slide-title">Project Impact & Future Roadmap</h2>
+        <p class="slide-subtitle">Democratizing quality English speaking mentorship and smart study tools for every student.</p>
+      </div>
+      <div class="slide-body">
+        <div class="grid-2">
+          <div class="glass-card">
+            <div class="card-icon mint">🌟</div>
+            <h3 class="card-title">Student Impact</h3>
+            <ul class="card-list" style="gap: 12px; margin-top: 10px;">
+              <li><span class="bullet">✔</span> <b>Confidence Booster:</b> Helps non-native English speakers overcome hesitation before campus placements and vivas.</li>
+              <li><span class="bullet">✔</span> <b>Zero Cost Barrier:</b> Replaces expensive language coaching with a 24/7 personal speaking companion.</li>
+              <li><span class="bullet">✔</span> <b>Academic Productivity:</b> Consolidates study notes, document compression, and quiz practice into one streamlined desk.</li>
+            </ul>
+          </div>
+          <div class="glass-card">
+            <div class="card-icon">🚀</div>
+            <h3 class="card-title">Future Roadmap</h3>
+            <ul class="card-list" style="gap: 12px; margin-top: 10px;">
+              <li><span class="bullet">✦</span> <b>AI Pronunciation Feedback:</b> Phoneme-level accent evaluation and wave spectrogram analysis.</li>
+              <li><span class="bullet">✦</span> <b>Peer-to-Peer Study Rooms:</b> Low-latency student pair-practice with AI moderation.</li>
+              <li><span class="bullet">✦</span> <b>Native Offline PWA:</b> Complete offline voice practice model running via WebAssembly on device.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 10: THANK YOU & TEAM PRESENTATION -->
+    <section class="slide" data-index="10">
+      <div class="slide-header">
+        <span class="brand-tag">Project Team</span>
+        <span class="slide-number">10 / 10</span>
+      </div>
+      <div class="slide-title-block" style="text-align: center; margin-bottom: 20px;">
+        <h2 class="slide-title" style="font-size: 36px;">Thank You for Your Time!</h2>
+        <p class="slide-subtitle" style="margin: 0 auto;">Questions & Feedback are welcome • TECH AI | Smart Way</p>
+      </div>
+      <div class="slide-body" style="align-items: center;">
+        <div class="team-grid">
+          <!-- Member 1 -->
+          <div class="team-card">
+            <div class="photo-placeholder">👤</div>
+            <h4 class="member-name">Bhashkar Sharma</h4>
+            <p class="member-role">Team Lead & Full-Stack Architect</p>
+            <span class="member-tag">System Architecture & AI</span>
+          </div>
+          <!-- Member 2 -->
+          <div class="team-card">
+            <div class="photo-placeholder">👤</div>
+            <h4 class="member-name">Team Member 2</h4>
+            <p class="member-role">AI & Speech Engineer</p>
+            <span class="member-tag">Web Speech & NLP Studio</span>
+          </div>
+          <!-- Member 3 -->
+          <div class="team-card">
+            <div class="photo-placeholder">👤</div>
+            <h4 class="member-name">Team Member 3</h4>
+            <p class="member-role">UI/UX & Frontend Lead</p>
+            <span class="member-tag">React, CSS & Animations</span>
+          </div>
+          <!-- Member 4 -->
+          <div class="team-card">
+            <div class="photo-placeholder">👤</div>
+            <h4 class="member-name">Team Member 4</h4>
+            <p class="member-role">Backend & Security Lead</p>
+            <span class="member-tag">API, Express & Auth</span>
+          </div>
+          <!-- Member 5 -->
+          <div class="team-card">
+            <div class="photo-placeholder">👤</div>
+            <h4 class="member-name">Team Member 5</h4>
+            <p class="member-role">QA & Documentation</p>
+            <span class="member-tag">Testing, Research & PPT</span>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: 13px; color: #94a3b8;">
+        <span>GitHub: <b>github.com/bhashkar108/miniproject</b></span>
+        <span>TECH AI | SMART WAY • 2026 Academic Edition</span>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- DECK NAVIGATION CONTROLS -->
+  <footer class="deck-controls">
+    <div class="indicators" id="indicators"></div>
+    <div class="nav-buttons">
+      <span class="hint-text">Use [← / →] Keys or buttons</span>
+      <button class="btn-nav" id="prevBtn">← Previous</button>
+      <button class="btn-nav" id="nextBtn">Next →</button>
+      <button class="btn-nav" id="fsBtn">⛶ Fullscreen</button>
+    </div>
+  </footer>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    let currentSlide = 0;
+
+    const indicatorsContainer = document.getElementById('indicators');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const fsBtn = document.getElementById('fsBtn');
+
+    // Create Indicators
+    slides.forEach((_, idx) => {
+      const dot = document.createElement('div');
+      dot.className = `indicator ${idx === 0 ? 'active' : ''}`;
+      dot.addEventListener('click', () => goToSlide(idx));
+      indicatorsContainer.appendChild(dot);
+    });
+
+    const indicators = document.querySelectorAll('.indicator');
+
+    function updateSlide() {
+      slides.forEach((slide, idx) => {
+        slide.classList.toggle('active', idx === currentSlide);
+      });
+      indicators.forEach((dot, idx) => {
+        dot.classList.toggle('active', idx === currentSlide);
+      });
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === totalSlides - 1;
+    }
+
+    function goToSlide(index) {
+      if (index >= 0 && index < totalSlides) {
+        currentSlide = index;
+        updateSlide();
+      }
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides - 1) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    prevBtn.addEventListener('click', prevSlide);
+    nextBtn.addEventListener('click', nextSlide);
+
+    // Keyboard navigation
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+    });
+
+    // Fullscreen toggle
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+    fsBtn.addEventListener('click', toggleFullscreen);
+
+    updateSlide();
+  </script>
+</body>
+</html>
