@@ -234,9 +234,9 @@ button:active {
 /* AI Animated Orb */
 .orb-wrap {
   position: relative;
-  width: min(280px, 80%);
-  aspect-ratio: 1;
-  margin: 28px auto 16px;
+  width: 140px;
+  height: 140px;
+  margin: 16px auto 12px;
   display: grid;
   place-items: center;
 }

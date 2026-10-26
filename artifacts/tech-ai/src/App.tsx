@@ -223,6 +223,8 @@ function AppContent() {
   const [lessonQuestion, setLessonQuestion] = useState('');
   const [lesson, setLesson] = useState<LessonResponse | null>(null);
   const [material, setMaterial] = useState<File | null>(null);
+  const [materialUrl, setMaterialUrl] = useState<string>('');
+  const [teacherTab, setTeacherTab] = useState<'preview' | 'lesson'>('preview');
   const [materialData, setMaterialData] = useState<{fileName:string;mimeType:string;extractedText:string}|null>(null);
   const [language, setLanguage] = useState('English');
   const [voiceRate, setVoiceRate] = useState(0.9);
@@ -341,7 +343,10 @@ function AppContent() {
       setMessage('Automatic installation is unavailable here. Use your browser menu to add this workspace to your home screen.');
     });
   }, []);
-  useEffect(()=>()=>{if(formPreviewUrl.startsWith('blob:'))URL.revokeObjectURL(formPreviewUrl);},[formPreviewUrl]);
+  useEffect(()=>()=>{
+    if(formPreviewUrl.startsWith('blob:'))URL.revokeObjectURL(formPreviewUrl);
+    if(materialUrl.startsWith('blob:'))URL.revokeObjectURL(materialUrl);
+  },[formPreviewUrl, materialUrl]);
   const currentUser = session.data || {id:0,name:profileDraft.name||'Guest student',email:'Guest workspace'};
   const profile = session.data ? (profileQuery.data || blankProfile) : profileDraft;
   const t = (text:string) => translate(uiLanguage,text);
@@ -399,10 +404,14 @@ function AppContent() {
   };
   const receiveMaterial = (file?:File) => {
     if(!file) return;
+    if (materialUrl.startsWith('blob:')) URL.revokeObjectURL(materialUrl);
+    const url = URL.createObjectURL(file);
+    setMaterialUrl(url);
     setMaterial(file);
     setMaterialData(null);
     setLesson(null);
-    setMessage(`Reading "${file.name}"…`);
+    setTeacherTab('preview');
+    setMessage(`"${file.name}" loaded! Previewing document on the right.`);
 
     // Client-side instant reading for text/markdown/code/notes
     if (file.type.startsWith('text/') || /\.(txt|md|csv|json|html|py|js|ts|jsx|tsx|css|log)$/i.test(file.name)) {
@@ -415,7 +424,7 @@ function AppContent() {
       onSuccess: materialResult => {
         setMaterialData(materialResult);
         if (materialResult.extractedText) setSourceText(materialResult.extractedText);
-        setMessage('Your study material is ready.');
+        setMessage(`"${file.name}" ready to study. Review preview on right or click "Teach me this".`);
       },
       onError: () => {
         // Fallback so student is never blocked even if server is offline or on static Vercel
@@ -427,7 +436,7 @@ function AppContent() {
         if (!sourceText.trim()) {
           setSourceText(`[Study Notes from ${file.name}]\nKey concepts, definitions, and questions for AI explanation.`);
         }
-        setMessage(`"${file.name}" loaded! Review or add notes below and click "Teach me this".`);
+        setMessage(`"${file.name}" opened in right panel. Review preview and click "Teach me this".`);
       }
     });
   };
@@ -451,10 +460,13 @@ function AppContent() {
       Japanese:'ja-JP',Chinese:'zh-CN',Korean:'ko-KR',Arabic:'ar-SA'
     };
     recognition.lang=recognitionLang[language]||'en-IN';
-    recognition.continuous=false;
+    recognition.continuous=true;
     recognition.interimResults=true;
     keepListening.current=true;
     speechRecognition.current=recognition;
+
+    let silenceTimer: any = null;
+    let accumulatedPhrase = '';
 
     recognition.onresult=(event:any)=>{
       let fullTranscript = '';
@@ -466,17 +478,24 @@ function AppContent() {
       }
       const phrase = fullTranscript.trim();
       if(!phrase) return;
-      keepListening.current=false;
-      speechRecognition.current=null;
-      setTeacherListening(false);
-      try { recognition.stop(); } catch {}
+      accumulatedPhrase = phrase;
       setLessonQuestion(phrase);
-      setMessage(`Voice question: "${phrase}". AI is preparing your explanation…`);
-      teach(phrase);
+
+      if (silenceTimer) clearTimeout(silenceTimer);
+      // Wait for 1.4s of silence after speech so user is not interrupted
+      silenceTimer = setTimeout(() => {
+        keepListening.current=false;
+        speechRecognition.current=null;
+        setTeacherListening(false);
+        try { recognition.stop(); } catch {}
+        setMessage(`Voice question: "${accumulatedPhrase}". AI is answering…`);
+        setTeacherTab('lesson');
+        teach(accumulatedPhrase);
+      }, 1400);
     };
     recognition.onerror=()=>{keepListening.current=false;speechRecognition.current=null;setTeacherListening(false);setMessage('Microphone recognition stopped. Check permission or type your question instead.');};
     recognition.onend=()=>{if(keepListening.current){keepListening.current=false;speechRecognition.current=null;setTeacherListening(false);}};
-    try{recognition.start();setTeacherListening(true);setMessage('Microphone is on. Speak your question clearly; AI responds automatically.');}
+    try{recognition.start();setTeacherListening(true);setMessage('Microphone is on. Speak your question naturally; AI will answer when you finish speaking.');}
     catch{setMessage('The microphone could not be started. Check browser permission.');}
   };
   const teach = (voiceQuestion?:string) => {
@@ -485,19 +504,22 @@ function AppContent() {
     const content = sourceText.trim() || materialData?.extractedText || question || '';
     if(!content.trim()){setMessage('Upload your own study material, paste notes, or ask a question to begin.');return;}
 
+    setTeacherTab('lesson');
     setMessage('AI Teacher is preparing your explanation…');
     explain.mutate(
       { data: { content, question: question || undefined, language } },
       {
         onSuccess: (result) => {
           setLesson(result);
-          setMessage('Explanation ready! You can listen to the audio or review key points.');
+          setTeacherTab('lesson');
+          setMessage('Explanation ready! Listen to the audio or review key points.');
           addProgress('lesson', result.title, material?.name || materialData?.fileName || question || 'Study question');
         },
         onError: () => {
           // Automatic seamless fallback generator so user NEVER gets an empty state or error
           const fallbackLesson = generateLocalTeacherLesson(content, question, language);
           setLesson(fallbackLesson);
+          setTeacherTab('lesson');
           setMessage('Explanation prepared grounded in your study material and question.');
           addProgress('lesson', fallbackLesson.title, material?.name || materialData?.fileName || question || 'Study question');
         }
@@ -857,7 +879,7 @@ function AppContent() {
       <main className="main-content">
         {message&&<div className="toast-message" role="status" data-testid="status-message"><span>{message}</span><button onClick={()=>setMessage('')} aria-label="Dismiss message"><X size={15}/></button></div>}
         {module==='home'&&<Dashboard summary={displaySummary} loading={!!session.data&&summaryQuery.isLoading} activities={activities} userName={currentUser.name} profilePhoto={profile.profilePhoto} onNavigate={switchModule} />}
-         {module==='teacher'&&<section className="page-section"><PageHeading eyebrow="LEARN FROM YOUR OWN MATERIAL" title="AI Teacher" subtitle="Upload notes, ask a question, and get an explanation grounded in what you are studying."/><div className="teacher-layout"><div className="panel teacher-input"><div className="panel-heading"><span className="heading-icon mint"><BookOpen size={18}/></span><div><h2>Study source</h2><p>PDF, DOCX, TXT, Markdown, or image</p></div></div><label className="dropzone" htmlFor="study-upload"><Upload size={22}/><b>{material?.name || 'Choose your study material'}</b><span>Only the file you select is analyzed</span><input id="study-upload" type="file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,image/*" onChange={e=>receiveMaterial(e.target.files?.[0])} data-testid="input-study-file"/></label>{uploadMaterial.isPending&&<InlineLoading label="Reading your file"/>}{materialData&&<div className="study-extract-meta"><FileText size={14}/><span>{materialData.fileName}</span><small>{materialData.mimeType||'Extracted text'} · editable below</small></div>}<label className="field-label">Extracted text or your notes<textarea rows={9} value={sourceText} onChange={e=>setSourceText(e.target.value)} placeholder="Paste a passage, lecture notes, a proof, or any topic you want to understand." data-testid="input-study-text"/></label>{processedBlob&&<button type="button" className="button button-subtle button-small" onClick={()=>{const ext=processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg';receiveMaterial(new File([processedBlob],`processed-study.${ext}`,{type:processedType}));}}><FilePlus2 size={14}/>Use Smart Doc copy as study material</button>}<div className="form-row-two"><label className="field-label">Explanation language<select className="select-input teacher-lang-select" value={language} onChange={e=>setLanguage(e.target.value)} data-testid="select-language"><option value="English">🇬🇧 English</option><option value="Hindi">🇮🇳 Hindi (हिन्दी)</option><option value="Hinglish">🇮🇳 Hinglish (Hindi-English mix)</option><option value="Bengali">🇮🇳 Bengali (বাংলা)</option><option value="Marathi">🇮🇳 Marathi (मराठी)</option><option value="Telugu">🇮🇳 Telugu (తెలుగు)</option><option value="Tamil">🇮🇳 Tamil (தமிழ்)</option><option value="Gujarati">🇮🇳 Gujarati (ગુજરાતી)</option><option value="Urdu">🇵🇰 Urdu (اردو)</option><option value="Kannada">🇮🇳 Kannada (ಕನ್ನಡ)</option><option value="Malayalam">🇮🇳 Malayalam (മലയാളം)</option><option value="Punjabi">🇮🇳 Punjabi (ਪੰਜਾਬੀ)</option><option value="Odia">🇮🇳 Odia (ଓଡ଼ିଆ)</option><option value="Spanish">🇪🇸 Spanish (Español)</option><option value="French">🇫🇷 French (Français)</option><option value="German">🇩🇪 German (Deutsch)</option><option value="Japanese">🇯🇵 Japanese (日本語)</option><option value="Chinese">🇨🇳 Chinese (中文)</option><option value="Korean">🇰🇷 Korean (한국어)</option><option value="Arabic">🇸🇦 Arabic (العربية)</option><option value="Russian">🇷🇺 Russian (Русский)</option><option value="Italian">🇮🇹 Italian (Italiano)</option><option value="Portuguese">🇵🇹 Portuguese (Português)</option><option value="Turkish">🇹🇷 Turkish (Türkçe)</option><option value="Nepali">🇳🇵 Nepali (नेपाली)</option><option value="Indonesian">🇮🇩 Indonesian (Bahasa Indonesia)</option></select></label><label className="field-label">Ask a question<span className="question-with-mic"><input value={lessonQuestion} onChange={e=>setLessonQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();teach();}}} placeholder="Type your question or click mic to ask…" data-testid="input-teacher-question"/><button type="button" className={`mic-button ${teacherListening?'recording':''}`} onClick={toggleTeacherMic} aria-label={teacherListening?'Stop microphone':'Start microphone'} title={teacherListening?'Stop listening':'Start voice question'}>{teacherListening?<MicOff size={17}/>:<Mic size={17}/>}</button></span><small>{teacherListening?'Listening for your voice question… speak clearly.':'Type any question & press Enter or "Teach me this", or speak via mic for instant AI reply.'}</small></label></div><button className="button button-primary button-wide" onClick={() => teach()} disabled={explain.isPending} data-testid="button-explain"><Sparkles size={16}/>{explain.isPending?'Preparing explanation':'Teach me this'}</button>{explain.isPending&&<InlineLoading label="Building an explanation from your material"/>}</div><div className="panel lesson-panel"><div className="lesson-top"><span className="eyebrow">YOUR LESSON</span><span className="ready-pill"><span className="status-dot"/>PRIVATE SESSION</span></div>{lesson?<LessonOutput lesson={lesson} language={language} rate={voiceRate} onRateChange={setVoiceRate}/>:<EmptyState icon={<AudioLines size={23}/>} title="Your explanation appears here" body="Upload a PDF, DOCX, TXT, Markdown, or image, or paste notes. Extracted material stays visible and editable before you ask."/>}</div></div></section>}
+         {module==='teacher'&&<section className="page-section"><PageHeading eyebrow="LEARN FROM YOUR OWN MATERIAL" title="AI Teacher" subtitle="Upload notes, ask a question, and get an explanation grounded in what you are studying."/><div className="teacher-layout"><div className="panel teacher-input"><div className="panel-heading"><span className="heading-icon mint"><BookOpen size={18}/></span><div><h2>Study source</h2><p>PDF, DOCX, TXT, Markdown, or image</p></div></div><label className="dropzone" htmlFor="study-upload"><Upload size={22}/><b>{material?.name || 'Choose your study material'}</b><span>Only the file you select is analyzed</span><input id="study-upload" type="file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,image/*" onChange={e=>receiveMaterial(e.target.files?.[0])} data-testid="input-study-file"/></label>{uploadMaterial.isPending&&<InlineLoading label="Reading your file"/>}{materialData&&<div className="study-extract-meta"><FileText size={14}/><span>{materialData.fileName}</span><small>{materialData.mimeType||'Extracted text'} · editable below</small></div>}<label className="field-label">Extracted text or your notes<textarea rows={9} value={sourceText} onChange={e=>setSourceText(e.target.value)} placeholder="Paste a passage, lecture notes, a proof, or any topic you want to understand." data-testid="input-study-text"/></label>{processedBlob&&<button type="button" className="button button-subtle button-small" onClick={()=>{const ext=processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg';receiveMaterial(new File([processedBlob],`processed-study.${ext}`,{type:processedType}));}}><FilePlus2 size={14}/>Use Smart Doc copy as study material</button>}<div className="form-row-two"><label className="field-label">Explanation language<select className="select-input teacher-lang-select" value={language} onChange={e=>setLanguage(e.target.value)} data-testid="select-language"><option value="English">🇬🇧 English</option><option value="Hindi">🇮🇳 Hindi (हिन्दी)</option><option value="Hinglish">🇮🇳 Hinglish (Hindi-English mix)</option><option value="Bengali">🇮🇳 Bengali (বাংলা)</option><option value="Marathi">🇮🇳 Marathi (मराठी)</option><option value="Telugu">🇮🇳 Telugu (తెలుగు)</option><option value="Tamil">🇮🇳 Tamil (தமிழ்)</option><option value="Gujarati">🇮🇳 Gujarati (ગુજરાતી)</option><option value="Urdu">🇵🇰 Urdu (اردو)</option><option value="Kannada">🇮🇳 Kannada (ಕನ್ನಡ)</option><option value="Malayalam">🇮🇳 Malayalam (മലയാളം)</option><option value="Punjabi">🇮🇳 Punjabi (ਪੰਜਾਬੀ)</option><option value="Odia">🇮🇳 Odia (ଓଡ଼ିଆ)</option><option value="Spanish">🇪🇸 Spanish (Español)</option><option value="French">🇫🇷 French (Français)</option><option value="German">🇩🇪 German (Deutsch)</option><option value="Japanese">🇯🇵 Japanese (日本語)</option><option value="Chinese">🇨🇳 Chinese (中文)</option><option value="Korean">🇰🇷 Korean (한국어)</option><option value="Arabic">🇸🇦 Arabic (العربية)</option><option value="Russian">🇷🇺 Russian (Русский)</option><option value="Italian">🇮🇹 Italian (Italiano)</option><option value="Portuguese">🇵🇹 Portuguese (Português)</option><option value="Turkish">🇹🇷 Turkish (Türkçe)</option><option value="Nepali">🇳🇵 Nepali (नेपाली)</option><option value="Indonesian">🇮🇩 Indonesian (Bahasa Indonesia)</option></select></label><label className="field-label">Ask a question<span className="question-with-mic"><input value={lessonQuestion} onChange={e=>setLessonQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();teach();}}} placeholder="Type your question or click mic to ask…" data-testid="input-teacher-question"/><button type="button" className={`mic-button ${teacherListening?'recording':''}`} onClick={toggleTeacherMic} aria-label={teacherListening?'Stop microphone':'Start microphone'} title={teacherListening?'Stop listening':'Start voice question'}>{teacherListening?<MicOff size={17}/>:<Mic size={17}/>}</button></span><small>{teacherListening?'Listening for your voice question… speak clearly.':'Type any question & press Enter or "Teach me this", or speak via mic for instant AI reply.'}</small></label></div><button className="button button-primary button-wide" onClick={() => teach()} disabled={explain.isPending} data-testid="button-explain"><Sparkles size={16}/>{explain.isPending?'Preparing explanation':'Teach me this'}</button>{explain.isPending&&<InlineLoading label="Building an explanation from your material"/>}</div><div className="panel lesson-panel"><div className="lesson-top"><div className="teacher-view-tabs"><button type="button" className={`teacher-tab-btn ${teacherTab === 'preview' ? 'active' : ''}`} onClick={() => setTeacherTab('preview')}><FileText size={14} /> Document Preview {material ? `(${material.name.length > 20 ? material.name.slice(0, 18) + '…' : material.name})` : ''}</button><button type="button" className={`teacher-tab-btn ${teacherTab === 'lesson' ? 'active' : ''}`} onClick={() => setTeacherTab('lesson')}><Sparkles size={14} /> AI Explanation {lesson ? '✓ Ready' : ''}</button></div><span className="ready-pill"><span className="status-dot"/>PRIVATE SESSION</span></div>{teacherTab === 'preview' ? (material ? (<div className="teacher-document-box">{material.type === 'application/pdf' || /\.pdf$/i.test(material.name) ? (<iframe src={materialUrl} title={material.name} className="teacher-pdf-viewer-frame"/>) : material.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(material.name) ? (<div className="teacher-img-viewer-box"><img src={materialUrl} alt={material.name} className="teacher-img-preview"/></div>) : (<div className="teacher-notes-viewer"><h4>Extracted Study Content:</h4><pre>{sourceText || materialData?.extractedText || 'Reading file content…'}</pre></div>)}<div className="teacher-preview-footer"><span><b>{material.name}</b> ({(material.size / 1024).toFixed(1)} KB)</span><button type="button" className="button button-primary" onClick={() => teach()} disabled={explain.isPending}><Sparkles size={15}/> {explain.isPending ? 'Preparing Explanation…' : 'Explain This Document with AI'}</button></div></div>) : sourceText.trim() ? (<div className="teacher-document-box"><div className="teacher-notes-viewer"><h4>Your Study Notes:</h4><p>{sourceText}</p></div><div className="teacher-preview-footer"><span>Notes ready for explanation</span><button type="button" className="button button-primary" onClick={() => teach()} disabled={explain.isPending}><Sparkles size={15}/> Explain These Notes with AI</button></div></div>) : (<EmptyState icon={<FileText size={24}/>} title="Upload your study material" body="Select a PDF, document, or image on the left. The document will open right here for you and the AI to study."/>)) : (lesson ? (<LessonOutput lesson={lesson} language={language} rate={voiceRate} onRateChange={setVoiceRate}/>) : (<EmptyState icon={<AudioLines size={24}/>} title="Your explanation appears here" body="Click 'Teach me this' or ask any question on the left to start the AI explanation in your chosen language."/>))}</div></div></section>}
         {module==='voice'&&<section className="page-section">
           <PageHeading eyebrow="TECH AI | SMART WAY" title="English Practice & AI Voice Studio" subtitle="Practise conversational English with your AI coach. Get real-time speech feedback, speaking level adaptation, and grammar tips."/>
           <VoicePractice onProgress={addProgress} />
@@ -998,6 +1020,7 @@ function ScholarshipPortalFallback({url}:{url:string}) {
 }
 function LessonOutput({lesson,language,rate,onRateChange}:{lesson:LessonResponse;language:string;rate:number;onRateChange:(value:number)=>void}) {
   const [speaking,setSpeaking]=useState(false);
+  const [volume,setVolume]=useState(1.0);
   const [activeRange,setActiveRange]=useState<{start:number;end:number}|null>(null);
   const [voices,setVoices]=useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice,setSelectedVoice]=useState('');
@@ -1023,7 +1046,11 @@ function LessonOutput({lesson,language,rate,onRateChange}:{lesson:LessonResponse
       if(speechRun.current!==run)return;
       const chunk=chunks[index];
       if(!chunk){setSpeaking(false);setActiveRange(null);return;}
-      const utterance=new SpeechSynthesisUtterance(chunk.text);utterance.rate=rate;utterance.lang=voice?.lang||wanted;if(voice)utterance.voice=voice;
+      const utterance=new SpeechSynthesisUtterance(chunk.text);
+      utterance.rate=rate;
+      utterance.volume=volume;
+      utterance.lang=voice?.lang||wanted;
+      if(voice)utterance.voice=voice;
       utterance.onstart=()=>{setSpeaking(true);setActiveRange({start:chunk.start,end:chunk.end});};
       utterance.onend=()=>{if(speechRun.current!==run)return;setSpeaking(false);index+=1;window.setTimeout(readNext,180);};
       utterance.onerror=()=>{if(speechRun.current===run){setSpeaking(false);setActiveRange(null);}};
@@ -1040,7 +1067,7 @@ function LessonOutput({lesson,language,rate,onRateChange}:{lesson:LessonResponse
    return <div className="lesson-output"><div className="lesson-header-row"><h2>{highlighted(lesson.title,0)}</h2><div className={`voice-visualizer ${speaking?'active':''}`} aria-label={speaking?'AI is speaking':'AI is silent'}>{Array.from({length:16},(_,i)=><i key={i}/>)}</div></div><div className="lesson-copy">{lesson.explanation.split(/\n+/).filter(Boolean).map((p,i)=>{
     const prior=lesson.explanation.split(/\n+/).filter(Boolean).slice(0,i).join('\n').length+i;
     return <p key={i}>{highlighted(p,titleEnd+2+prior)}</p>;
-   })}</div>{lesson.keyPoints.length>0&&<div className="key-points"><h3>Keep these in mind</h3>{lesson.keyPoints.map((point,i)=><div key={i}><span>{String(i+1).padStart(2,'0')}</span>{point}</div>)}</div>}{lesson.followUpQuestions.length>0&&<div className="followups"><h3>Try asking next</h3>{lesson.followUpQuestions.map((q,i)=><p key={i}><ArrowRight size={13}/>{q}</p>)}</div>}<div className="speech-controls"><button className={`button ${speaking?'button-primary':'button-subtle'}`} onClick={say}>{speaking?'■ Stop reading':'▶ Listen to teacher explanation'}</button><label className="voice-choice">Speech voice<select value={selectedVoice} onChange={event=>setSelectedVoice(event.target.value)}><option value="">Automatic · {language}</option>{voices.map(item=><option key={item.voiceURI} value={item.voiceURI}>{item.name} · {item.lang}</option>)}</select></label><label>Teacher speed <b>{rate.toFixed(1)}×</b><input type="range" min=".5" max="1.5" step=".1" value={rate} onChange={event=>onRateChange(Number(event.target.value))}/></label><small>{speaking?'Teacher reading 2-3 words dictation…':voice?`Voice: ${voice.name}`:'Speech voices available in your browser'}</small></div></div>;
+   })}</div>{lesson.keyPoints.length>0&&<div className="key-points"><h3>Keep these in mind</h3>{lesson.keyPoints.map((point,i)=><div key={i}><span>{String(i+1).padStart(2,'0')}</span>{point}</div>)}</div>}{lesson.followUpQuestions.length>0&&<div className="followups"><h3>Try asking next</h3>{lesson.followUpQuestions.map((q,i)=><p key={i}><ArrowRight size={13}/>{q}</p>)}</div>}<div className="speech-controls"><button className={`button ${speaking?'button-primary':'button-subtle'}`} onClick={say}>{speaking?'■ Stop reading':'▶ Listen to teacher explanation'}</button><label className="voice-choice">Speech voice<select value={selectedVoice} onChange={event=>setSelectedVoice(event.target.value)}><option value="">Automatic · {language}</option>{voices.map(item=><option key={item.voiceURI} value={item.voiceURI}>{item.name} · {item.lang}</option>)}</select></label><div className="teacher-slider-pair"><label>Teacher speed <b>{rate.toFixed(1)}×</b><input type="range" min=".5" max="1.5" step=".1" value={rate} onChange={event=>onRateChange(Number(event.target.value))}/></label><label>Teacher volume <b>{Math.round(volume*100)}%</b><input type="range" min="0.1" max="1.0" step="0.05" value={volume} onChange={event=>setVolume(Number(event.target.value))}/></label></div><small>{speaking?'Teacher reading 2-3 words dictation…':voice?`Voice: ${voice.name}`:'Speech voices available in your browser'}</small></div></div>;
 }
 function UserAvatar({photo,initials,className=''}:{photo?:string|null;initials:string;className?:string}) {
   return <span className={`avatar ${className}`}>{photo?<img src={photo} alt="" aria-hidden="true"/>:initials}</span>;
