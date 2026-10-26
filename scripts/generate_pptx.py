@@ -1,597 +1,519 @@
+"""
+TECH AI | Smart Way — Premium 16:9 Widescreen PPTX Generator
+Ultra-polished glassmorphism dark-theme deck with rich visual hierarchy.
+"""
 import os
 from pptx import Presentation
-from pptx.util import Inches, Pt
+from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
+from pptx.oxml.ns import qn
 
-def create_deck(output_path):
+# ── Palette ──────────────────────────────────────────────
+BG         = RGBColor(9, 13, 22)
+BG2        = RGBColor(12, 17, 30)
+CARD       = RGBColor(16, 23, 39)
+CARD_LITE  = RGBColor(22, 30, 50)
+SKY        = RGBColor(56, 189, 248)
+CYAN       = RGBColor(34, 211, 238)
+MINT       = RGBColor(52, 211, 153)
+VIOLET     = RGBColor(139, 92, 246)
+AMBER      = RGBColor(251, 191, 36)
+ROSE       = RGBColor(251, 113, 133)
+WHITE      = RGBColor(241, 245, 249)
+MUTED      = RGBColor(148, 163, 184)
+DIM        = RGBColor(100, 116, 139)
+BORDER     = RGBColor(30, 41, 59)
+DARK_CARD  = RGBColor(15, 23, 42)
+
+W = Inches(13.333)
+H = Inches(7.5)
+
+def make_pptx(out):
     prs = Presentation()
-    # 16:9 Widescreen dimensions
-    prs.slide_width = Inches(13.333)
-    prs.slide_height = Inches(7.5)
-    blank_layout = prs.slide_layouts[6]
+    prs.slide_width = W
+    prs.slide_height = H
+    blank = prs.slide_layouts[6]
 
-    # Theme Palette
-    BG_COLOR = RGBColor(9, 13, 22)        # #090D16 Deep Dark
-    CARD_BG = RGBColor(18, 25, 41)        # #121929 Glass Card
-    PRIMARY_SKY = RGBColor(56, 189, 248)  # #38BDF8 Sky Blue
-    CYAN = RGBColor(34, 211, 238)         # #22D3EE Cyan
-    MINT = RGBColor(52, 211, 153)         # #34D399 Mint
-    AMBER = RGBColor(251, 191, 36)        # #FBBF24 Amber
-    VIOLET = RGBColor(167, 139, 250)      # #A78BFA Violet
-    TEXT_LIGHT = RGBColor(241, 245, 249)  # White-ish
-    TEXT_MUTED = RGBColor(148, 163, 184)  # Slate
-    CARD_BORDER = RGBColor(30, 41, 59)    # Slate border
+    # ── helpers ───────────────────────────────────────
+    def bg(s):
+        r = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, W, H)
+        r.fill.solid(); r.fill.fore_color.rgb = BG; r.line.fill.background()
+        # top-left glow blob
+        g1 = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(-2), Inches(-2), Inches(7), Inches(7))
+        g1.fill.solid(); g1.fill.fore_color.rgb = RGBColor(14, 30, 55); g1.line.fill.background()
+        # bottom-right glow
+        g2 = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(8), Inches(3), Inches(8), Inches(8))
+        g2.fill.solid(); g2.fill.fore_color.rgb = RGBColor(12, 25, 48); g2.line.fill.background()
 
-    def set_slide_bg(slide):
-        bg = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, prs.slide_height)
-        bg.fill.solid()
-        bg.fill.fore_color.rgb = BG_COLOR
-        bg.line.fill.background()
-        return bg
+    def txt(s, x, y, w, h, text, sz=12, bold=False, color=WHITE, align=PP_ALIGN.LEFT, font="Segoe UI"):
+        tb = s.shapes.add_textbox(x, y, w, h)
+        tf = tb.text_frame; tf.word_wrap = True
+        p = tf.paragraphs[0]; p.text = text
+        p.font.size = Pt(sz); p.font.bold = bold; p.font.color.rgb = color
+        p.font.name = font; p.alignment = align
+        return tf
 
-    def add_header(slide, badge_text, slide_no, title_text, subtitle_text=""):
-        # Badge
-        badge = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(0.5), Inches(2.8), Inches(0.4))
-        badge.fill.solid()
-        badge.fill.fore_color.rgb = RGBColor(15, 23, 42)
-        badge.line.color.rgb = PRIMARY_SKY
-        badge.line.width = Pt(1)
-        tf = badge.text_frame
-        tf.word_wrap = True
-        p = tf.paragraphs[0]
-        p.text = badge_text.upper()
-        p.font.size = Pt(10.5)
-        p.font.bold = True
-        p.font.color.rgb = PRIMARY_SKY
-        p.font.name = "Arial"
-        p.alignment = PP_ALIGN.CENTER
+    def badge(s, x, y, label, accent=SKY):
+        bw = Inches(2.6); bh = Inches(0.36)
+        r = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, bw, bh)
+        r.fill.solid(); r.fill.fore_color.rgb = DARK_CARD
+        r.line.color.rgb = accent; r.line.width = Pt(1.2)
+        tf = r.text_frame; tf.word_wrap = False
+        p = tf.paragraphs[0]; p.text = label.upper()
+        p.font.size = Pt(9.5); p.font.bold = True; p.font.color.rgb = accent
+        p.font.name = "Segoe UI"; p.alignment = PP_ALIGN.CENTER
 
-        # Slide Number
-        num_box = slide.shapes.add_textbox(Inches(11.0), Inches(0.5), Inches(1.5), Inches(0.4))
-        p = num_box.text_frame.paragraphs[0]
-        p.text = slide_no
-        p.font.size = Pt(12)
-        p.font.bold = True
-        p.font.color.rgb = TEXT_MUTED
-        p.font.name = "Arial"
-        p.alignment = PP_ALIGN.RIGHT
+    def slide_num(s, num):
+        txt(s, Inches(11.5), Inches(0.42), Inches(1.2), Inches(0.35),
+            f"{num:02d} / 10", 11, True, DIM, PP_ALIGN.RIGHT)
 
-        # Title
-        t_box = slide.shapes.add_textbox(Inches(0.8), Inches(0.95), Inches(11.7), Inches(0.7))
-        p = t_box.text_frame.paragraphs[0]
-        p.text = title_text
-        p.font.size = Pt(26)
-        p.font.bold = True
-        p.font.color.rgb = TEXT_LIGHT
-        p.font.name = "Arial"
+    def heading(s, title, sub=""):
+        txt(s, Inches(0.9), Inches(0.95), Inches(11.5), Inches(0.65),
+            title, 28, True, WHITE, font="Segoe UI Semibold")
+        if sub:
+            txt(s, Inches(0.9), Inches(1.55), Inches(10.5), Inches(0.42),
+                sub, 13.5, False, MUTED)
 
-        # Subtitle
-        if subtitle_text:
-            s_box = slide.shapes.add_textbox(Inches(0.8), Inches(1.55), Inches(11.7), Inches(0.45))
-            p = s_box.text_frame.paragraphs[0]
-            p.text = subtitle_text
-            p.font.size = Pt(13)
-            p.font.color.rgb = TEXT_MUTED
-            p.font.name = "Arial"
+    def accent_line(s, x, y, w, color=SKY):
+        ln = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, x, y, w, Pt(3))
+        ln.fill.solid(); ln.fill.fore_color.rgb = color; ln.line.fill.background()
 
-    def add_card(slide, left, top, width, height, title, items=[], accent_color=PRIMARY_SKY, icon=""):
-        card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height)
-        card.fill.solid()
-        card.fill.fore_color.rgb = CARD_BG
-        card.line.color.rgb = CARD_BORDER
-        card.line.width = Pt(1)
+    def card(s, x, y, w, h, icon, title, bullets, accent=SKY):
+        # card background
+        r = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h)
+        r.fill.solid(); r.fill.fore_color.rgb = CARD
+        r.line.color.rgb = BORDER; r.line.width = Pt(1)
+        # top accent strip
+        accent_line(s, x + Inches(0.15), y + Inches(0.06), w - Inches(0.3), accent)
+        # icon circle
+        ic = Inches(0.48)
+        circ = s.shapes.add_shape(MSO_SHAPE.OVAL, x + Inches(0.22), y + Inches(0.28), ic, ic)
+        circ.fill.solid(); circ.fill.fore_color.rgb = DARK_CARD
+        circ.line.color.rgb = accent; circ.line.width = Pt(1.5)
+        tf_ic = circ.text_frame; p_ic = tf_ic.paragraphs[0]
+        p_ic.text = icon; p_ic.font.size = Pt(16); p_ic.alignment = PP_ALIGN.CENTER
+        # title
+        txt(s, x + Inches(0.82), y + Inches(0.28), w - Inches(1.05), Inches(0.38),
+            title, 15, True, WHITE)
+        # bullets
+        tb = s.shapes.add_textbox(x + Inches(0.25), y + Inches(0.85), w - Inches(0.5), h - Inches(1.0))
+        tf = tb.text_frame; tf.word_wrap = True
+        for i, b in enumerate(bullets):
+            p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            p.text = f"▸  {b}"
+            p.font.size = Pt(11); p.font.color.rgb = RGBColor(203, 213, 225)
+            p.font.name = "Segoe UI"; p.space_before = Pt(5)
 
-        # Content Box inside card
-        tb = slide.shapes.add_textbox(left + Inches(0.2), top + Inches(0.2), width - Inches(0.4), height - Inches(0.4))
-        tf = tb.text_frame
-        tf.word_wrap = True
+    def pill(s, x, y, label, accent=SKY):
+        pw = Inches(2.65); ph = Inches(0.58)
+        r = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, y, pw, ph)
+        r.fill.solid(); r.fill.fore_color.rgb = CARD
+        r.line.color.rgb = accent; r.line.width = Pt(1)
+        # dot
+        d = s.shapes.add_shape(MSO_SHAPE.OVAL, x + Inches(0.15), y + Inches(0.2), Inches(0.18), Inches(0.18))
+        d.fill.solid(); d.fill.fore_color.rgb = accent; d.line.fill.background()
+        txt(s, x + Inches(0.42), y + Inches(0.1), pw - Inches(0.55), Inches(0.38),
+            label, 11, True, WHITE, PP_ALIGN.LEFT)
 
-        p0 = tf.paragraphs[0]
-        full_title = f"{icon}  {title}" if icon else title
-        p0.text = full_title
-        p0.font.size = Pt(16)
-        p0.font.bold = True
-        p0.font.color.rgb = accent_color
-        p0.font.name = "Arial"
+    # ═══════════════════════════════════════════════════
+    # SLIDE 01 — WELCOME HERO
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
 
-        for item in items:
-            p = tf.add_paragraph()
-            p.text = f"• {item}"
-            p.font.size = Pt(12)
-            p.font.color.rgb = TEXT_LIGHT
-            p.font.name = "Arial"
-            p.space_before = Pt(6)
+    # decorative badge
+    badge(s, Inches(5.35), Inches(0.45), "✦  Project Showcase  ✦", SKY)
 
-        return card
+    # orb
+    orb = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(5.65), Inches(1.15), Inches(2.0), Inches(2.0))
+    orb.fill.solid(); orb.fill.fore_color.rgb = SKY
+    orb.line.color.rgb = CYAN; orb.line.width = Pt(4)
+    # inner orb highlight
+    orb2 = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(6.0), Inches(1.45), Inches(1.3), Inches(1.3))
+    orb2.fill.solid(); orb2.fill.fore_color.rgb = RGBColor(125, 211, 252)
+    orb2.line.fill.background()
 
-    # ==========================================
-    # SLIDE 1: WELCOME & HERO SLIDE
-    # ==========================================
-    s1 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s1)
+    # title
+    txt(s, Inches(0.5), Inches(3.3), Inches(12.333), Inches(0.95),
+        "TECH AI | SMART WAY", 48, True, WHITE, PP_ALIGN.CENTER, "Segoe UI Black")
 
-    # Decorative Orb Circle
-    orb = s1.shapes.add_shape(MSO_SHAPE.OVAL, Inches(5.9), Inches(1.0), Inches(1.5), Inches(1.5))
-    orb.fill.solid()
-    orb.fill.fore_color.rgb = PRIMARY_SKY
-    orb.line.color.rgb = CYAN
-    orb.line.width = Pt(3)
+    # subtitle
+    txt(s, Inches(1.5), Inches(4.25), Inches(10.333), Inches(0.6),
+        "Next-Generation AI Voice English Practice & Smart Student Workspace", 20, False, SKY, PP_ALIGN.CENTER)
 
-    # Title Box
-    t1 = s1.shapes.add_textbox(Inches(1.0), Inches(2.7), Inches(11.333), Inches(1.2))
-    p = t1.text_frame.paragraphs[0]
-    p.text = "TECH AI | SMART WAY"
-    p.font.size = Pt(44)
-    p.font.bold = True
-    p.font.color.rgb = TEXT_LIGHT
-    p.font.name = "Arial"
-    p.alignment = PP_ALIGN.CENTER
+    # accent line center
+    accent_line(s, Inches(5.5), Inches(4.85), Inches(2.333), SKY)
 
-    sub1 = s1.shapes.add_textbox(Inches(1.5), Inches(3.9), Inches(10.333), Inches(0.8))
-    p = sub1.text_frame.paragraphs[0]
-    p.text = "Next-Generation AI Voice English Practice & Smart Student Workspace Ecosystem"
-    p.font.size = Pt(18)
-    p.font.color.rgb = PRIMARY_SKY
-    p.font.name = "Arial"
-    p.alignment = PP_ALIGN.CENTER
-
-    # 4 Feature Pills
-    features = [
-        "🎙️ AI Voice Practice Studio",
-        "💡 Real-Time Grammar & Hindi Help",
-        "📄 Smart Doc & Equation Grapher",
-        "🎯 Auto Quiz & Private Analytics"
+    # 4 feature pills
+    pills_data = [
+        ("🎙️  AI Voice Practice Studio", SKY),
+        ("💡  Grammar & Hindi Guidance", CYAN),
+        ("📄  Smart Doc & Equation Graph", MINT),
+        ("🎯  Auto Quiz & Analytics", AMBER),
     ]
-    pill_w = Inches(2.7)
-    gap = Inches(0.2)
-    start_x = Inches(1.0)
-    for i, feat in enumerate(features):
-        x = start_x + i * (pill_w + gap)
-        pill = s1.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, Inches(4.9), pill_w, Inches(0.7))
-        pill.fill.solid()
-        pill.fill.fore_color.rgb = CARD_BG
-        pill.line.color.rgb = PRIMARY_SKY
-        pill.line.width = Pt(1)
-        p = pill.text_frame.paragraphs[0]
-        p.text = feat
-        p.font.size = Pt(11.5)
-        p.font.bold = True
-        p.font.color.rgb = TEXT_LIGHT
-        p.alignment = PP_ALIGN.CENTER
+    for i, (pl, ac) in enumerate(pills_data):
+        pill(s, Inches(0.7) + i * Inches(3.05), Inches(5.15), pl, ac)
 
-    foot1 = s1.shapes.add_textbox(Inches(1.0), Inches(6.3), Inches(11.333), Inches(0.5))
-    p = foot1.text_frame.paragraphs[0]
-    p.text = "A Purpose-Built Academic Solution • Clean Architecture • Privacy-First Design"
-    p.font.size = Pt(12)
-    p.font.color.rgb = TEXT_MUTED
-    p.alignment = PP_ALIGN.CENTER
+    # footer
+    txt(s, Inches(0.5), Inches(6.5), Inches(12.333), Inches(0.4),
+        "Presented by Tech AI Team  •  Modern Academic AI Solution  •  2026",
+        11, False, DIM, PP_ALIGN.CENTER)
 
-    # ==========================================
-    # SLIDE 2: PROBLEM STATEMENT
-    # ==========================================
-    s2 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s2)
-    add_header(s2, "Problem Statement", "02 / 10", "The Real Challenges Faced by Students Today",
-               "Students in tier-2/3 institutions face high anxiety in spoken English and scattered, unsafe academic study tools.")
-    
-    col_w = Inches(3.7)
-    add_card(s2, Inches(0.8), Inches(2.2), col_w, Inches(4.5),
-             "English Speaking Hesitation",
-             [
-                 "Fear of peer judgment and making mistakes publicly",
-                 "Lack of 1-on-1 speaking partners for regular practice",
-                 "Hesitation during college vivas and placement interviews",
-                 "Grammar errors go uncorrected or create demoralization",
-                 "Expensive spoken English coaching institutes out of reach"
-             ],
-             PRIMARY_SKY, "🗣️")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 02 — PROBLEM STATEMENT
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
+    badge(s, Inches(0.9), Inches(0.42), "Problem Statement", ROSE)
+    slide_num(s, 2)
+    heading(s, "The Real Challenges Faced by Students Today",
+            "Millions of students struggle with English anxiety, tool fragmentation, and privacy risks.")
 
-    add_card(s2, Inches(4.8), Inches(2.2), col_w, Inches(4.5),
-             "Fragmented Study Workflows",
-             [
-                 "Students juggle multiple isolated sites for notes and tests",
-                 "Generic chatbots hallucinate and give off-syllabus answers",
-                 "Static quiz PDFs without immediate automated scoring",
-                 "Manual equation plotting and visual analysis are slow",
-                 "No unified desk that ties speaking and subject learning"
-             ],
-             AMBER, "📚")
+    card(s, Inches(0.6), Inches(2.2), Inches(3.9), Inches(4.8),
+         "🗣️", "English Speaking Anxiety", [
+             "Fear of judgment when speaking in front of peers or interviewers",
+             "Lack of accessible 1-on-1 conversational English partners",
+             "Grammatical errors go uncorrected or create embarrassment",
+             "Expensive spoken English coaching institutes out of reach",
+             "Hesitation in campus placement vivas and group discussions"
+         ], ROSE)
 
-    add_card(s2, Inches(8.8), Inches(2.2), col_w, Inches(4.5),
-             "Privacy & Accessibility Gaps",
-             [
-                 "Sensitive documents uploaded to shady third-party sites",
-                 "Document compression portals risk data leakage",
-                 "Zero native Hindi/Hinglish explanations for tricky phrases",
-                 "Rigid tools forcing users into prefilled template formats",
-                 "Heavyweight desktop apps that lag on budget laptops"
-             ],
-             VIOLET, "🔒")
+    card(s, Inches(4.7), Inches(2.2), Inches(3.9), Inches(4.8),
+         "📚", "Scattered Academic Tools", [
+             "Students juggle 4–5 different websites for notes, tests, and docs",
+             "Generic chatbots hallucinate without student's syllabus context",
+             "Static quiz PDFs without immediate automated scoring feedback",
+             "Manual document compression often corrupts file quality",
+             "No unified student desk connecting learning & practice tools"
+         ], AMBER)
 
-    # ==========================================
-    # SLIDE 3: PROPOSED SOLUTION
-    # ==========================================
-    s3 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s3)
-    add_header(s3, "Proposed Solution", "03 / 10", "TECH AI | Smart Way — The Unified Ecosystem",
-               "A privacy-centric, all-in-one AI platform empowering students to speak fluently and master academic tasks.")
+    card(s, Inches(8.8), Inches(2.2), Inches(3.9), Inches(4.8),
+         "🔒", "Privacy & Accessibility Gaps", [
+             "Sensitive IDs & marksheets uploaded to unknown third-party servers",
+             "Zero native Hindi / regional language explanations available",
+             "Rigid form templates that don't adapt to student's own material",
+             "Poor mobile responsiveness on budget smartphones and slow internet",
+             "Data leakage risk with cloud-based document processors"
+         ], VIOLET)
 
-    half_w = Inches(5.7)
-    add_card(s3, Inches(0.8), Inches(2.2), half_w, Inches(4.5),
-             "Interactive AI Voice Practice Studio",
-             [
-                 "Dual-Column Architecture: Animated AI Voice Orb on the LEFT, Conversation Studio on the RIGHT",
-                 "Real-Time Speech Recognition & Expressive Text-to-Speech synthesis",
-                 "3 Selectable Levels: Beginner, Intermediate, and Advanced difficulty",
-                 "Polite Grammar Feedback: Explains errors kindly with better phrases",
-                 "Bilingual Hindi Tooltips: Instant Hindi explanations on demand",
-                 "8 Engaging Topics: College life, job interviews, travel, tech, hobbies",
-                 "Responsive Layout: Naturally stacks vertically on mobile devices"
-             ],
-             PRIMARY_SKY, "🎙️")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 03 — PROPOSED SOLUTION
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
+    badge(s, Inches(0.9), Inches(0.42), "Proposed Solution", MINT)
+    slide_num(s, 3)
+    heading(s, "TECH AI | Smart Way — The Unified Ecosystem",
+            "A purpose-built, privacy-centric AI companion that transforms how students speak, study, and prepare.")
 
-    add_card(s3, Inches(6.8), Inches(2.2), half_w, Inches(4.5),
-             "Complete In-Browser Academic Toolkit",
-             [
-                 "AI Teacher: Grounded lessons generated exclusively from your uploaded notes (PDF/DOCX/Images)",
-                 "Hands-free Voice Doubts: Speak questions aloud with custom pacing",
-                 "Smart Doc Studio: 100% in-browser camera scan, 90° rotation, crop, and exact KB file compressor",
-                 "Equation Grapher: 2D curve plotting, intercept finding, and image OCR",
-                 "Auto Quiz Engine: Past paper to interactive MCQ conversion & auto-solve",
-                 "Streamlined Student Profile: Only 8 essential fields, zero clutter"
-             ],
-             MINT, "⚡")
+    card(s, Inches(0.6), Inches(2.2), Inches(5.85), Inches(4.8),
+         "🎙️", "Interactive AI Voice Practice Studio", [
+             "Animated Sky-Blue Orb on LEFT + Conversation Panel on RIGHT",
+             "Real-Time browser speech recognition & expressive TTS synthesis",
+             "3 Adaptive Levels: Beginner → Intermediate → Advanced difficulty",
+             "Polite grammar corrections with improved sentence suggestions",
+             "Instant Hindi / Hinglish explanations for complex English phrases",
+             "8 practice topics: College, Interviews, Travel, Tech, Daily Life",
+             "Favorites vault to save golden sentences and vocabulary"
+         ], SKY)
 
-    # ==========================================
-    # SLIDE 4: FEATURE 1 - AI VOICE PRACTICE STUDIO
-    # ==========================================
-    s4 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s4)
-    add_header(s4, "Core Flagship Feature", "04 / 10", "AI Voice Practice & English Studio",
-               "Engineered with strict layout symmetry: Visualizer on the LEFT, Conversation Studio on the RIGHT.")
+    card(s, Inches(6.7), Inches(2.2), Inches(5.85), Inches(4.8),
+         "⚡", "Complete Academic Toolkit", [
+             "AI Teacher — Grounded lessons from your own PDF / DOCX / images",
+             "Voice Questions — Speak doubts, AI responds with adjustable pace",
+             "Smart Doc — Camera scanner, rotate, crop, and KB-precise compressor",
+             "Equation Grapher — Interactive 2D curve plotter with OCR import",
+             "Auto Quiz — Past papers → interactive MCQ tests + auto-solver",
+             "Streamlined Profile — Only 8 essential student fields, zero clutter",
+             "100% Client-Side Privacy — Sensitive files never leave your device"
+         ], MINT)
 
-    add_card(s4, Inches(0.8), Inches(2.2), Inches(4.8), Inches(4.5),
-             "Animated AI Voice Visualizer (LEFT)",
-             [
-                 "Sky-Blue & Cyan Voice Orb pulsing dynamically during speech",
-                 "24-band live audio frequency visualizer animation",
-                 "6 Clear States: Speaking, Listening, Thinking, Paused, Stopped, Idle",
-                 "Complete Speech Controls: Start, Stop, Pause, Resume, Repeat",
-                 "Pacing Slider: 0.7x to 1.4x speaking speed adjustment",
-                 "Voice selection dropdown matching available browser voices",
-                 "Independent scrolling & balanced desktop column width"
-             ],
-             CYAN, "🔮")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 04 — VOICE PRACTICE STUDIO
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
+    badge(s, Inches(0.9), Inches(0.42), "Flagship Feature", SKY)
+    slide_num(s, 4)
+    heading(s, "AI Voice Practice & English Studio",
+            "Dual-column desktop layout: Animated Visualizer on LEFT, Conversation Studio on RIGHT.")
 
-    add_card(s4, Inches(5.9), Inches(2.2), Inches(6.6), Inches(4.5),
-             "Conversation Studio Panel (RIGHT)",
-             [
-                 "Interactive Chat Bubbles with auto-scroll to the newest message",
-                 "Beginner Level: Short sentences, simple vocabulary, extra guidance",
-                 "Intermediate Level: Natural conversational flow & idioms",
-                 "Advanced Level: Complex structure, professional interview vocabulary",
-                 "Polite Grammar Correction: Highlights mistakes with improved sentence versions",
-                 "Hindi Explanations: Explains complex words in accessible Hindi/Hinglish",
-                 "Favorites Vault: 1-click save for golden sentences and interview answers",
-                 "Zero Fluff: Clean dark UI with high-contrast readable text bubbles"
-             ],
-             PRIMARY_SKY, "💬")
+    # LEFT card — Visualizer
+    card(s, Inches(0.6), Inches(2.2), Inches(5.2), Inches(4.8),
+         "🔮", "Animated AI Voice Visualizer", [
+             "Sky-Blue & Cyan voice orb pulsing dynamically during AI speech",
+             "24-band real-time audio frequency equalizer bars animation",
+             "6 Live States: Speaking • Listening • Thinking • Paused • Stopped • Idle",
+             "Complete Controls: Start, Stop, Pause, Resume, Repeat buttons",
+             "Speed slider: 0.7x to 1.4x speaking pace adjustment",
+             "AI voice toggle & browser voice selection dropdown",
+             "Independently scrollable with balanced column widths"
+         ], CYAN)
 
-    # ==========================================
-    # SLIDE 5: FEATURE 2 - AI TEACHER
-    # ==========================================
-    s5 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s5)
-    add_header(s5, "Study Companion", "05 / 10", "AI Teacher: Grounded Learning From Your Notes",
-               "Upload lecture notes, textbooks, or syllabus sheets. Learn without AI hallucination or generic internet noise.")
+    # Decorative mini orb inside left area
+    mo = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(2.6), Inches(2.6), Inches(0.7), Inches(0.7))
+    mo.fill.solid(); mo.fill.fore_color.rgb = SKY; mo.line.color.rgb = CYAN; mo.line.width = Pt(2)
 
-    add_card(s5, Inches(0.8), Inches(2.2), col_w, Inches(4.5),
-             "Bring Your Own Material",
-             [
-                 "Accepts PDF, DOCX, TXT, Markdown, and scanned notes images",
-                 "Extracts text cleanly for student inspection and direct editing",
-                 "Zero prefilled dummy data — strictly grounded in your syllabus",
-                 "One-click ingestion of processed Smart Doc copies",
-                 "Protects study context from irrelevant web hallucinations"
-             ],
-             MINT, "📖")
+    # RIGHT card — Conversation
+    card(s, Inches(6.05), Inches(2.2), Inches(6.65), Inches(4.8),
+         "💬", "Conversation Studio Features", [
+             "Beginner: Simple sentences, gentle grammar hints, slow pace",
+             "Intermediate: Natural conversational flow with common idioms",
+             "Advanced: Complex structure, professional interview vocabulary",
+             "Polite Corrections: Highlights mistakes with improved alternatives",
+             "Hindi Explanations: Instant Hinglish tooltips for vocabulary gaps",
+             "Favorites Vault: 1-click save for golden sentences & interview answers",
+             "Auto-scroll chat bubbles with user/AI message differentiation",
+             "Responsive: Stacks vertically on mobile without overflow"
+         ], SKY)
 
-    add_card(s5, Inches(4.8), Inches(2.2), col_w, Inches(4.5),
-             "Hands-Free Voice Inquiries",
-             [
-                 "Speak your doubts via browser speech recognition",
-                 "AI automatically processes question once speech finishes",
-                 "Synthesizes spoken lessons with custom pacing (0.5x–1.5x)",
-                 "Key point breakdowns: 'Keep these in mind' summary cards",
-                 "Dynamic follow-up suggestion prompts for deeper mastery"
-             ],
-             PRIMARY_SKY, "🎙️")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 05 — AI TEACHER
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
+    badge(s, Inches(0.9), Inches(0.42), "Study Companion", MINT)
+    slide_num(s, 5)
+    heading(s, "AI Teacher: Grounded Learning From Your Notes",
+            "Upload lecture slides, notes, or textbook photos. Learn without AI hallucination or internet noise.")
 
-    add_card(s5, Inches(8.8), Inches(2.2), col_w, Inches(4.5),
-             "Multi-Lingual Explanations",
-             [
-                 "Understand complex concepts in your native mother tongue",
-                 "Supports English, Hindi, Hinglish, Bengali, Tamil, Telugu, etc.",
-                 "High-contrast dark mode language dropdown with crisp text",
-                 "Instant concept clarity without language barriers",
-                 "Private session: notes remain strictly inside your workspace"
-             ],
-             VIOLET, "🌐")
+    card(s, Inches(0.6), Inches(2.2), Inches(3.9), Inches(4.8),
+         "📖", "Your Own Material", [
+             "Accepts PDF, DOCX, TXT, Markdown, and scanned note images",
+             "Extracts text cleanly for student review and direct editing",
+             "Zero prefilled dummy data — strictly grounded in your syllabus",
+             "One-click ingestion of Smart Doc processed copies",
+             "Eliminates AI hallucination by anchoring to your uploaded content"
+         ], MINT)
 
-    # ==========================================
-    # SLIDE 6: FEATURE 3 - SMART DOC & EQUATION
-    # ==========================================
-    s6 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s6)
-    add_header(s6, "Document & Math Tools", "06 / 10", "Smart Doc Studio & Equation Grapher",
-               "100% in-browser document manipulation and interactive 2D mathematical curve plotting.")
+    card(s, Inches(4.7), Inches(2.2), Inches(3.9), Inches(4.8),
+         "🎙️", "Voice Questions & Dictation", [
+             "Speak your doubts aloud using browser speech recognition",
+             "AI auto-processes question when speech ends naturally",
+             "Synthesizes spoken lessons with custom pacing (0.5x – 1.5x)",
+             "Key Takeaway cards: 'Keep these in mind' structured summaries",
+             "Dynamic follow-up prompts suggesting deeper exploration paths"
+         ], SKY)
 
-    add_card(s6, Inches(0.8), Inches(2.2), half_w, Inches(4.5),
-             "Smart Doc: In-Browser File Optimizer",
-             [
-                 "Direct Camera Scanning: Live viewfinder with capture flash",
-                 "Multi-Format Conversion: Export to PDF, PNG, or JPEG",
-                 "Persistent Transformations: 90° step rotation & 4-sided edge crop",
-                 "Precise Target File Size: Dial in exact KB limits for college portals",
-                 "Side-by-Side Comparison: View Original vs. Processed copy live",
-                 "Full-Screen Inspector: Modal review with zoom controls",
-                 "100% Client-Side Privacy: Confidential docs never touch external servers"
-             ],
-             CYAN, "📄")
+    card(s, Inches(8.8), Inches(2.2), Inches(3.9), Inches(4.8),
+         "🌐", "Multilingual Explanations", [
+             "Understand complex concepts in your mother tongue",
+             "Supports: English, Hindi, Hinglish, Bengali, Tamil, Telugu, etc.",
+             "12+ UI language options with high-contrast dark mode dropdown",
+             "Instant concept clarity without language barriers",
+             "Private session: notes and answers stay inside your workspace"
+         ], VIOLET)
 
-    add_card(s6, Inches(6.8), Inches(2.2), half_w, Inches(4.5),
-             "Equation Graph Visualizer",
-             [
-                 "2D Interactive SVG Graph: Plots linear, polynomial, trig & exponential curves",
-                 "Dual Curve Comparison: Graph two functions simultaneously (e.g., sin(x) & cos(x))",
-                 "Auto Intercepts & Crossings: Computes root points and intersections instantly",
-                 "Image OCR Parser: Snap photo of written equations to populate graphs",
-                 "Dynamic Domain Range: Adjust horizontal range from -12 to +12 seamlessly",
-                 "Zero External Math Libraries: Uses safe AST parsing locally in browser"
-             ],
-             VIOLET, "📈")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 06 — SMART DOC & EQUATION
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
+    badge(s, Inches(0.9), Inches(0.42), "Document & Math Tools", CYAN)
+    slide_num(s, 6)
+    heading(s, "Smart Doc Studio & Equation Grapher",
+            "100% in-browser document manipulation and interactive mathematical curve exploration.")
 
-    # ==========================================
-    # SLIDE 7: FEATURE 4 - AUTO QUIZ & ANALYTICS
-    # ==========================================
-    s7 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s7)
-    add_header(s7, "Assessment & Analytics", "07 / 10", "Auto Quiz Engine & Student Momentum Tracking",
-               "Turn question papers into interactive practice tests with target-score solvers and private analytics.")
+    card(s, Inches(0.6), Inches(2.2), Inches(5.85), Inches(4.8),
+         "📄", "Smart Doc: In-Browser Optimizer", [
+             "Direct Camera Scanning: Full-screen viewfinder with capture flash",
+             "Format Conversion: Export processed copy as PDF, PNG, or JPEG",
+             "Persistent Adjustments: 90° step rotation & 4-sided edge crop",
+             "Precise KB Target: Dial in exact file size limits for college portals",
+             "Side-by-Side View: Compare original & processed with synced zoom",
+             "Full-Screen Inspector: Detailed modal review with download button",
+             "100% Privacy: Confidential docs never touch any external server"
+         ], CYAN)
 
-    add_card(s7, Inches(0.8), Inches(2.2), col_w, Inches(4.5),
-             "Worksheet Ingestion",
-             [
-                 "Upload past exam papers (PDF, DOCX, Images, TXT)",
-                 "Import public online quiz links via URL parser",
-                 "Automatically detects question text, options, and answer keys",
-                 "Displays embedded preview of source paper side-by-side",
-                 "Eliminates manual retyping of questions"
-             ],
-             AMBER, "🎯")
+    card(s, Inches(6.7), Inches(2.2), Inches(5.85), Inches(4.8),
+         "📈", "Equation Graph Visualizer", [
+             "2D Interactive SVG plotting: linear, polynomial, trig & exponential",
+             "Dual Curve Comparison: Graph two functions simultaneously",
+             "Auto Intercepts: Computes axis roots and crossing points instantly",
+             "Image OCR Import: Snap photo of handwritten equations to auto-plot",
+             "Dynamic Domain Range: Adjust horizontal scale from –12 to +12",
+             "Safe AST Parser: Restricted mathjs evaluation, no code injection risk",
+             "Quick Chip Presets: sin(x), x², cos(x), sqrt(abs(x)) for fast access"
+         ], VIOLET)
 
-    add_card(s7, Inches(4.8), Inches(2.2), col_w, Inches(4.5),
-             "Practice & Auto-Solve",
-             [
-                 "Manual Practice Mode: Timed test with instant correctness feedback",
-                 "Auto-Solve All Mode: AI solves to an exact target correct score",
-                 "Detailed Explanation Drawer: Breaks down why an option is right",
-                 "In-Quiz AI Tutor: Ask follow-up doubts about any question",
-                 "Scorecard Summary: Time spent, correct/incorrect review list"
-             ],
-             MINT, "🤖")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 07 — AUTO QUIZ & ANALYTICS
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
+    badge(s, Inches(0.9), Inches(0.42), "Assessment & Analytics", AMBER)
+    slide_num(s, 7)
+    heading(s, "Auto Quiz Engine & Student Momentum",
+            "Turn question papers into interactive gamified practice tests with target-score solvers.")
 
-    add_card(s7, Inches(8.8), Inches(2.2), col_w, Inches(4.5),
-             "Private Momentum Tracker",
-             [
-                 "Workspace Activity Log: Tracks study sessions, quizzes, graphs",
-                 "Aggregated Stats: Total study minutes, quizzes, average score",
-                 "Guest Mode Persistence: Saved in localStorage without mandatory login",
-                 "Optional Cloud Sync: Connect account for cross-device access",
-                 "Streamlined Profile: 8 core student fields, zero intrusive forms"
-             ],
-             PRIMARY_SKY, "📊")
+    card(s, Inches(0.6), Inches(2.2), Inches(3.9), Inches(4.8),
+         "🎯", "Worksheet → Quiz Ingestion", [
+             "Upload past exam papers: PDF, DOCX, Images, TXT",
+             "Import public online quiz links via URL parser",
+             "AI auto-detects question text, options, and answer keys",
+             "Embedded preview of source paper alongside extracted MCQs",
+             "Eliminates tedious manual question retyping completely"
+         ], AMBER)
 
-    # ==========================================
-    # SLIDE 8: TECH STACK & ARCHITECTURE
-    # ==========================================
-    s8 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s8)
-    add_header(s8, "System Architecture", "08 / 10", "Modern Technology Stack & Design System",
-               "Built with modern web standards, client-side speed, and robust TypeScript engineering.")
+    card(s, Inches(4.7), Inches(2.2), Inches(3.9), Inches(4.8),
+         "🤖", "Practice & Auto-Solve Modes", [
+             "Manual Practice: Timed test with instant correctness feedback",
+             "Auto-Solve: AI solves to your exact target correct score",
+             "Detailed Explanations: Why each option is right or wrong",
+             "In-Quiz AI Tutor: Ask follow-up doubts about any question",
+             "Scorecard Summary: Time spent, correct/incorrect breakdown"
+         ], MINT)
 
-    quarter_w = Inches(2.75)
-    q_gap = Inches(0.25)
-    add_card(s8, Inches(0.8) + 0*(quarter_w+q_gap), Inches(2.2), quarter_w, Inches(4.5),
-             "Frontend Core",
-             [
-                 "React 19 & TypeScript",
-                 "Vite Fast Bundler",
-                 "TailwindCSS 4 Engine",
-                 "Lucide Modern Icons",
-                 "Wouter Routing",
-                 "TanStack Query Cache"
-             ],
-             PRIMARY_SKY, "⚡")
+    card(s, Inches(8.8), Inches(2.2), Inches(3.9), Inches(4.8),
+         "📊", "Private Momentum Tracker", [
+             "Activity Log: Tracks study sessions, quizzes, equations, docs",
+             "Aggregated Stats: Total minutes, quiz count, average score %",
+             "Guest Mode: Saved in localStorage, no mandatory login needed",
+             "Optional Cloud Sync: Connect account for cross-device access",
+             "Streamlined Profile: 8 core student fields, zero bloat"
+         ], SKY)
 
-    add_card(s8, Inches(0.8) + 1*(quarter_w+q_gap), Inches(2.2), quarter_w, Inches(4.5),
-             "Speech & Audio",
-             [
-                 "Web Speech API (STT)",
-                 "SpeechSynthesis (TTS)",
-                 "Web Audio API Visualizer",
-                 "HTML5 24-Band Equalizer",
-                 "Dynamic Voice Pitch/Rate",
-                 "Standalone Vanilla JS"
-             ],
-             CYAN, "🎙️")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 08 — TECH STACK
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
+    badge(s, Inches(0.9), Inches(0.42), "System Architecture", SKY)
+    slide_num(s, 8)
+    heading(s, "Technology Stack & Architecture",
+            "Built with modern web standards, client-side speed, and robust TypeScript engineering.")
 
-    add_card(s8, Inches(0.8) + 2*(quarter_w+q_gap), Inches(2.2), quarter_w, Inches(4.5),
-             "Local File Engines",
-             [
-                 "PDF-Lib (Client PDF)",
-                 "PDF.js Web Worker",
-                 "HTML5 Canvas 2D API",
-                 "Mathjs Safe AST Parser",
-                 "Client Photo Compression",
-                 "Zero-Leakage Local Processing"
-             ],
-             MINT, "📄")
+    qw = Inches(2.9); qg = Inches(0.2)
+    stack = [
+        ("⚡", "Frontend Core", ["React 19 + TypeScript", "Vite 7 Fast Bundler", "TailwindCSS 4 Utility Engine",
+         "Lucide Modern Icon Set", "Wouter Lightweight Router", "TanStack Query Caching"], SKY),
+        ("🎙️", "Speech & Audio", ["Web Speech API (STT)", "SpeechSynthesis (TTS)", "Web Audio API Visualizer",
+         "Canvas 24-Band Equalizer", "Dynamic Voice Pitch/Rate", "Standalone Vanilla JS Bundle"], CYAN),
+        ("📄", "Local Processing", ["PDF-Lib (Client PDF Gen)", "PDF.js Web Worker Thread", "HTML5 Canvas 2D API",
+         "Mathjs Safe AST Parser", "Client Photo Compressor", "Zero-Leakage File Pipeline"], MINT),
+        ("🛡️", "Backend & Security", ["Node.js Express Server", "Argon2 Password Hashing", "SQLite Session Store",
+         "Strict URL Sanitization", "Guest localStorage Mode", "Vercel / Docker Deploy Ready"], AMBER),
+    ]
+    for i, (ic, ti, bu, ac) in enumerate(stack):
+        card(s, Inches(0.6) + i * (qw + qg), Inches(2.2), qw, Inches(4.8), ic, ti, bu, ac)
 
-    add_card(s8, Inches(0.8) + 3*(quarter_w+q_gap), Inches(2.2), quarter_w, Inches(4.5),
-             "Backend & Security",
-             [
-                 "Node.js Express Server",
-                 "Argon2 Password Hashing",
-                 "SQLite Session Store",
-                 "Strict URL Validation",
-                 "Guest Device Storage",
-                 "Docker / Vercel Deploy Ready"
-             ],
-             AMBER, "🛡️")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 09 — IMPACT & ROADMAP
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
+    badge(s, Inches(0.9), Inches(0.42), "Impact & Future Scope", MINT)
+    slide_num(s, 9)
+    heading(s, "Real-World Impact & Project Roadmap",
+            "Democratizing quality English speaking mentorship and smart study tools for every student.")
 
-    # ==========================================
-    # SLIDE 9: IMPACT & ROADMAP
-    # ==========================================
-    s9 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s9)
-    add_header(s9, "Future Scope", "09 / 10", "Real-World Impact & Project Roadmap",
-               "Democratizing quality English speaking mentorship and smart academic tools for every student.")
+    card(s, Inches(0.6), Inches(2.2), Inches(5.85), Inches(4.8),
+         "🌟", "Student Impact & Outcomes", [
+             "Overcomes Speaking Hesitation: Safe, judgement-free 24/7 practice zone",
+             "Interview Readiness: Tailored practice for campus placements & vivas",
+             "Zero Financial Burden: Replaces costly English coaching with free AI mentor",
+             "High Academic Efficiency: 5 fragmented tools → 1 unified workspace",
+             "Bilingual Inclusivity: Hindi / Hinglish explanations bridge language gaps",
+             "Data Privacy Assured: Sensitive documents never leave the student's browser",
+             "Mobile Responsive: Works on budget smartphones and slow connections"
+         ], MINT)
 
-    add_card(s9, Inches(0.8), Inches(2.2), half_w, Inches(4.5),
-             "Student Impact & Achievements",
-             [
-                 "Overcomes English Speaking Hesitation: Safe, non-judgmental practice zone",
-                 "Interview Readiness: Tailored practice for campus placements and technical vivas",
-                 "Zero Financial Burden: High-quality English speaking mentor without costly coaching fees",
-                 "High Academic Efficiency: Replaces 5 disconnected tools with 1 unified workspace",
-                 "Inclusivity: Native Hindi explanations ensure students never feel left behind",
-                 "Privacy Assured: Critical personal documents stay safe on the student's device"
-             ],
-             MINT, "🌟")
+    card(s, Inches(6.7), Inches(2.2), Inches(5.85), Inches(4.8),
+         "🚀", "Future Development Roadmap", [
+             "Phase 1: Phoneme-level AI pronunciation scoring via audio spectrograms",
+             "Phase 2: Peer-to-peer live student discussion rooms with AI moderation",
+             "Phase 3: WebAssembly (WASM) local AI models for 100% offline speech",
+             "Phase 4: Progressive Web App (PWA) for Android & iOS installability",
+             "Phase 5: Automated mock placement interview scoring with resume alignment",
+             "Phase 6: Regional language voice practice (Hindi, Tamil, Telugu, Bengali)",
+             "Phase 7: AI-powered resume builder integrated with voice practice history"
+         ], SKY)
 
-    add_card(s9, Inches(6.8), Inches(2.2), half_w, Inches(4.5),
-             "Future Development Roadmap",
-             [
-                 "Phase 1: Phoneme-Level Pronunciation Scoring using real-time audio spectrograms",
-                 "Phase 2: Peer-to-Peer Study Rooms for live speaking battles and collaborative quizzes",
-                 "Phase 3: WebAssembly (WASM) Local AI models for 100% offline speech recognition",
-                 "Phase 4: Cross-Platform Mobile Apps (Android & iOS) via Progressive Web App (PWA)",
-                 "Phase 5: Automated Mock Placement Interview scoring with resume-aligned questions"
-             ],
-             PRIMARY_SKY, "🚀")
+    # ═══════════════════════════════════════════════════
+    # SLIDE 10 — THANK YOU & 5 TEAM MEMBERS
+    # ═══════════════════════════════════════════════════
+    s = prs.slides.add_slide(blank); bg(s)
 
-    # ==========================================
-    # SLIDE 10: THANK YOU & 5 TEAM MEMBERS
-    # ==========================================
-    s10 = prs.slides.add_slide(blank_layout)
-    set_slide_bg(s10)
+    # top accent line full width
+    accent_line(s, Inches(0.5), Inches(0.35), Inches(12.333), SKY)
 
-    # Big Thank you Header
-    t10 = s10.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.7), Inches(0.7))
-    p = t10.text_frame.paragraphs[0]
-    p.text = "Thank You for Your Time & Attention!"
-    p.font.size = Pt(28)
-    p.font.bold = True
-    p.font.color.rgb = TEXT_LIGHT
-    p.alignment = PP_ALIGN.CENTER
+    # Thank You title
+    txt(s, Inches(0.5), Inches(0.5), Inches(12.333), Inches(0.8),
+        "Thank You for Your Time!", 36, True, WHITE, PP_ALIGN.CENTER, "Segoe UI Black")
 
-    sub10 = s10.shapes.add_textbox(Inches(0.8), Inches(1.1), Inches(11.7), Inches(0.4))
-    p = sub10.text_frame.paragraphs[0]
-    p.text = "TECH AI | SMART WAY • Questions & Discussion Warmly Welcomed"
-    p.font.size = Pt(14)
-    p.font.color.rgb = PRIMARY_SKY
-    p.alignment = PP_ALIGN.CENTER
+    txt(s, Inches(0.5), Inches(1.25), Inches(12.333), Inches(0.4),
+        "TECH AI | SMART WAY  •  Questions & Discussion Warmly Welcomed", 15, False, SKY, PP_ALIGN.CENTER)
 
-    # 5 Team Member Profile Cards
-    team_members = [
-        {"name": "Bhashkar Sharma", "role": "Team Lead & Full-Stack", "tag": "System Architecture & AI"},
-        {"name": "Team Member 2", "role": "AI & Speech Engineer", "tag": "Web Speech API & NLP"},
-        {"name": "Team Member 3", "role": "UI/UX & Frontend Lead", "tag": "React 19 & Animations"},
-        {"name": "Team Member 4", "role": "Backend & Security Lead", "tag": "Node.js, Express & Auth"},
-        {"name": "Team Member 5", "role": "QA & Documentation", "tag": "Testing & Project Reports"},
+    # accent line below subtitle
+    accent_line(s, Inches(4.5), Inches(1.72), Inches(4.333), CYAN)
+
+    # 5 Team member cards
+    team = [
+        ("Bhashkar Sharma", "Team Lead &\nFull-Stack Architect", "System Architecture\n& AI Integration", SKY),
+        ("Team Member 2", "AI & Speech\nEngineer", "Web Speech API\n& NLP Studio", CYAN),
+        ("Team Member 3", "UI/UX &\nFrontend Lead", "React 19, CSS\n& Animations", MINT),
+        ("Team Member 4", "Backend &\nSecurity Lead", "Node.js, Express\n& Auth System", VIOLET),
+        ("Team Member 5", "QA, Testing &\nDocumentation", "Testing, Research\n& Project Reports", AMBER),
     ]
 
-    card_w5 = Inches(2.2)
-    gap5 = Inches(0.18)
-    start_x5 = Inches(0.8)
+    cw = Inches(2.25); cg = Inches(0.16)
+    sx = Inches(0.6)
 
-    for i, mem in enumerate(team_members):
-        x = start_x5 + i * (card_w5 + gap5)
-        top_y = Inches(1.8)
+    for i, (name, role, tag, accent) in enumerate(team):
+        x = sx + i * (cw + cg)
+        ty = Inches(2.0)
 
-        # Card container
-        tcard = s10.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, top_y, card_w5, Inches(4.5))
-        tcard.fill.solid()
-        tcard.fill.fore_color.rgb = CARD_BG
-        tcard.line.color.rgb = PRIMARY_SKY
-        tcard.line.width = Pt(1.5)
+        # card bg
+        r = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, x, ty, cw, Inches(4.65))
+        r.fill.solid(); r.fill.fore_color.rgb = CARD
+        r.line.color.rgb = accent; r.line.width = Pt(1.5)
 
-        # Circular Photo Placeholder
-        circle_d = Inches(1.2)
-        circle_x = x + (card_w5 - circle_d) / 2
-        circle_y = top_y + Inches(0.35)
-        photo_circle = s10.shapes.add_shape(MSO_SHAPE.OVAL, circle_x, circle_y, circle_d, circle_d)
-        photo_circle.fill.solid()
-        photo_circle.fill.fore_color.rgb = RGBColor(30, 41, 59)
-        photo_circle.line.color.rgb = CYAN
-        photo_circle.line.width = Pt(2)
+        # top accent strip
+        accent_line(s, x + Inches(0.1), ty + Inches(0.06), cw - Inches(0.2), accent)
 
-        # Initial / Icon inside photo circle
-        p_tf = photo_circle.text_frame
-        p = p_tf.paragraphs[0]
-        p.text = "👤"
-        p.font.size = Pt(26)
-        p.alignment = PP_ALIGN.CENTER
+        # photo circle
+        cd = Inches(1.3)
+        cx = x + (cw - cd) / 2
+        cy = ty + Inches(0.3)
+        photo = s.shapes.add_shape(MSO_SHAPE.OVAL, cx, cy, cd, cd)
+        photo.fill.solid(); photo.fill.fore_color.rgb = DARK_CARD
+        photo.line.color.rgb = accent; photo.line.width = Pt(2.5)
+        ptf = photo.text_frame; pp = ptf.paragraphs[0]
+        pp.text = "👤"; pp.font.size = Pt(30); pp.alignment = PP_ALIGN.CENTER
 
-        # Member Info Box
-        info_box = s10.shapes.add_textbox(x + Inches(0.1), top_y + Inches(1.75), card_w5 - Inches(0.2), Inches(2.5))
-        itf = info_box.text_frame
-        itf.word_wrap = True
+        # name
+        txt(s, x + Inches(0.05), ty + Inches(1.75), cw - Inches(0.1), Inches(0.35),
+            name, 14, True, WHITE, PP_ALIGN.CENTER)
 
-        p1 = itf.paragraphs[0]
-        p1.text = mem["name"]
-        p1.font.size = Pt(14)
-        p1.font.bold = True
-        p1.font.color.rgb = TEXT_LIGHT
-        p1.alignment = PP_ALIGN.CENTER
+        # role
+        tb_role = s.shapes.add_textbox(x + Inches(0.05), ty + Inches(2.15), cw - Inches(0.1), Inches(0.55))
+        tf_r = tb_role.text_frame; tf_r.word_wrap = True
+        p_r = tf_r.paragraphs[0]; p_r.text = role
+        p_r.font.size = Pt(11); p_r.font.bold = True; p_r.font.color.rgb = accent
+        p_r.font.name = "Segoe UI"; p_r.alignment = PP_ALIGN.CENTER
 
-        p2 = itf.add_paragraph()
-        p2.text = mem["role"]
-        p2.font.size = Pt(11)
-        p2.font.color.rgb = PRIMARY_SKY
-        p2.alignment = PP_ALIGN.CENTER
-        p2.space_before = Pt(4)
+        # tag pill
+        tag_y = ty + Inches(2.85)
+        tag_r = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
+                                    x + Inches(0.15), tag_y, cw - Inches(0.3), Inches(0.6))
+        tag_r.fill.solid(); tag_r.fill.fore_color.rgb = DARK_CARD
+        tag_r.line.color.rgb = BORDER; tag_r.line.width = Pt(0.8)
+        tb_tag = s.shapes.add_textbox(x + Inches(0.2), tag_y + Inches(0.05),
+                                       cw - Inches(0.4), Inches(0.5))
+        tf_tag = tb_tag.text_frame; tf_tag.word_wrap = True
+        p_t = tf_tag.paragraphs[0]; p_t.text = tag
+        p_t.font.size = Pt(9.5); p_t.font.color.rgb = MUTED
+        p_t.font.name = "Segoe UI"; p_t.alignment = PP_ALIGN.CENTER
 
-        p3 = itf.add_paragraph()
-        p3.text = f"[{mem['tag']}]"
-        p3.font.size = Pt(9.5)
-        p3.font.color.rgb = TEXT_MUTED
-        p3.alignment = PP_ALIGN.CENTER
-        p3.space_before = Pt(8)
+        # "Add Photo" note
+        txt(s, x + Inches(0.05), ty + Inches(3.6), cw - Inches(0.1), Inches(0.55),
+            "↑ Replace with\nactual photo", 8.5, False, DIM, PP_ALIGN.CENTER)
 
-        p4 = itf.add_paragraph()
-        p4.text = "Insert Photo Here"
-        p4.font.size = Pt(8.5)
-        p4.font.color.rgb = RGBColor(100, 116, 139)
-        p4.alignment = PP_ALIGN.CENTER
-        p4.space_before = Pt(6)
+    # Footer
+    accent_line(s, Inches(0.5), Inches(6.85), Inches(12.333), BORDER)
+    txt(s, Inches(0.5), Inches(6.95), Inches(6.0), Inches(0.3),
+        "GitHub: github.com/bhashkar108/miniproject", 10.5, True, MUTED, PP_ALIGN.LEFT)
+    txt(s, Inches(6.5), Inches(6.95), Inches(6.333), Inches(0.3),
+        "TECH AI | SMART WAY  •  2026 Academic Edition", 10.5, False, DIM, PP_ALIGN.RIGHT)
 
-    # Footer note
-    foot10 = s10.shapes.add_textbox(Inches(0.8), Inches(6.6), Inches(11.7), Inches(0.4))
-    p = foot10.text_frame.paragraphs[0]
-    p.text = "Repository: github.com/bhashkar108/miniproject  •  Built with React 19 & Python Engine  •  TECH AI 2026"
-    p.font.size = Pt(11)
-    p.font.color.rgb = TEXT_MUTED
-    p.alignment = PP_ALIGN.CENTER
-
-    prs.save(output_path)
-    print(f"Presentation saved successfully to: {output_path}")
+    # ── Save ────────────────────
+    prs.save(out)
+    print(f"✅ Premium PPT saved: {out}")
 
 if __name__ == "__main__":
-    out_dir = "artifacts/tech-ai/public"
-    os.makedirs(out_dir, exist_ok=True)
-    deck_path = os.path.join(out_dir, "TECH_AI_Smart_Way_Presentation.pptx")
-    create_deck(deck_path)
+    p = os.path.join("artifacts", "tech-ai", "public", "TECH_AI_Smart_Way_Presentation.pptx")
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    make_pptx(p)
