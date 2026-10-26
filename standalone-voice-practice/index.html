@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TECH AI | Smart Way – AI Voice Practice</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Topbar Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">T</div>
+        <div>
+          <h1>TECH AI <span>| Smart Way</span></h1>
+          <p>AI Voice Practice & English Conversation Studio</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="pill active" id="topicBtn">▦ Topics</button>
+        <button class="pill" id="translateBtn">文 Hindi Meaning</button>
+        <button class="pill" id="favoriteViewPill">▮ Favorites (<span id="favCount">0</span>)</button>
+        <button class="pill" id="newBtn">＋ New Session</button>
+      </div>
+    </header>
+
+    <!-- Main Studio Layout: LEFT = Visualizer, RIGHT = Conversation -->
+    <main class="layout">
+      <!-- 1. LEFT PANEL: AI Voice Visualizer (Laptop / Desktop LEFT) -->
+      <aside class="panel visualizer-panel">
+        <div class="visualizer-head">
+          <div>
+            <h2>AI Voice Visualizer</h2>
+            <div class="sub">Your English Speaking Coach</div>
+          </div>
+          <select class="select" id="voiceSelect" aria-label="Select AI Voice">
+            <option value="default">✨ Default Voice</option>
+          </select>
+        </div>
+
+        <!-- Sky-Blue Animated Orb -->
+        <div class="orb-wrap" id="orbWrap">
+          <div class="orb-halo"></div>
+          <div class="orb-wave"></div>
+          <div class="orb">
+            <div class="cloud"></div>
+            <div class="cloud two"></div>
+            <div class="cloud three"></div>
+            <div class="orb-ring"></div>
+            <div class="orb-core">✦</div>
+          </div>
+        </div>
+
+        <!-- Audio Equalizer Bars -->
+        <div class="audio-bars" id="audioBars" aria-hidden="true">
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </div>
+
+        <!-- State & Dynamic Caption -->
+        <div class="orb-state" id="orbState">AI is ready</div>
+        <div class="orb-caption" id="orbCaption">
+          Tap the microphone or choose a reply to start practising. The sky-blue orb animates as you speak!
+        </div>
+
+        <!-- Audio Controls (Start, Pause/Resume, Stop, Repeat) -->
+        <div class="visual-controls">
+          <button class="control-btn" id="stopBtn" title="Stop speech">⏹ Stop speech</button>
+          <button class="control-btn" id="pauseResumeBtn" title="Pause or Resume voice">⏸ Pause</button>
+          <button class="control-btn" id="repeatBtn" title="Repeat last sentence">🔁 Repeat</button>
+          <button class="control-btn primary active" id="autoBtn" title="Toggle AI voice on/off">◉ Voice: On</button>
+        </div>
+
+        <!-- Language & Voice Settings Box -->
+        <div class="settings-box">
+          <div class="settings-row">
+            <span class="settings-label">Speaking Speed <b id="speedVal">1.0×</b></span>
+            <div class="speed-slider-wrap">
+              <input type="range" id="speedSlider" min="0.7" max="1.3" step="0.1" value="1.0" aria-label="Speech speed">
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <span class="settings-label">Practice Accent / Language</span>
+            <select class="select" id="practiceLang" aria-label="Practice language">
+              <option value="en-US">English (US)</option>
+              <option value="en-GB">English (UK)</option>
+              <option value="en-IN">English (India)</option>
+              <option value="hi-IN">Hindi (हिंदी)</option>
+              <option value="es-ES">Spanish</option>
+              <option value="fr-FR">French</option>
+              <option value="de-DE">German</option>
+            </select>
+          </div>
+
+          <div class="settings-row">
+            <span class="settings-label">Explanation Language</span>
+            <select class="select" id="supportLang" aria-label="Explanation language">
+              <option value="hi">Explain in Hindi (हिंदी)</option>
+              <option value="en">Explain in Simple English</option>
+              <option value="es">Explain in Spanish</option>
+              <option value="fr">Explain in French</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="footnote">
+          Powered by browser Web Speech API. Microphone permissions stay strictly on your device.
+        </div>
+      </aside>
+
+      <!-- 2. RIGHT PANEL: Conversation Studio (Laptop / Desktop RIGHT) -->
+      <section class="panel chat-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Conversation Studio</h2>
+            <div class="sub">Natural dialogues with instant feedback</div>
+          </div>
+          <div class="status">
+            <span class="dot"></span>
+            <span id="chatStatus">Ready to practise</span>
+          </div>
+        </div>
+
+        <!-- Practice Quick Toolbar -->
+        <div class="toolbar">
+          <button class="tool" id="topicQuickBtn"><span>▦</span> Change Topic</button>
+          <button class="tool" id="translateQuickBtn"><span>文</span> Translate / Explain</button>
+          <button class="tool" id="favoritesBtn"><span>▮</span> Saved Expressions</button>
+        </div>
+
+        <!-- Chat Conversation Messages -->
+        <div class="messages" id="messages" aria-live="polite">
+          <div class="msg ai">
+            <div class="sender">TECH AI Tutor · now</div>
+            <div class="bubble">Hello! 👋 Welcome to your English speaking practice session. Let's talk about your daily life.
+
+<strong>Question:</strong> What do you usually like to do in your free time?</div>
+            <div class="msg-actions">
+              <button class="mini-btn" onclick="window.readText ? window.readText('Hello! Welcome to your English practice session. What do you usually like to do in your free time?') : null">🔊 Read</button>
+              <button class="mini-btn" onclick="document.getElementById('translateBtn')?.click()">文 Translate</button>
+              <button class="mini-btn" onclick="document.getElementById('favoritesBtn')?.click()">▮ Favorite</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Composer -->
+        <div class="composer">
+          <p class="level-label">Choose your speaking level</p>
+          <div class="levels">
+            <button class="level-btn selected" data-level="Beginner">
+              <b>🌱 Beginner</b>
+              <small>Simple & short</small>
+            </button>
+            <button class="level-btn" data-level="Intermediate">
+              <b>✨ Intermediate</b>
+              <small>Natural sentences</small>
+            </button>
+            <button class="level-btn" data-level="Advanced">
+              <b>🚀 Advanced</b>
+              <small>Fluent & detailed</small>
+            </button>
+          </div>
+
+          <!-- Suggested Response Pill -->
+          <div class="suggestion">
+            <div class="suggestion-text" id="suggestion">“In my free time, I like playing cricket.”</div>
+            <button id="suggestRead" title="Listen to pronunciation">🔊 Listen</button>
+            <button id="useSuggestion">Use reply</button>
+          </div>
+
+          <!-- Input Row (Text + Mic + Send) -->
+          <div class="sendrow">
+            <input class="text-input" id="messageInput" placeholder="Type your sentence or tap the mic to speak…" autocomplete="off">
+            <button class="mic-btn" id="micBtn" title="Tap to speak with microphone">🎙️</button>
+            <button class="send-btn" id="sendBtn">Send ↑</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Favorites Modal -->
+  <div class="modal-overlay" id="favModal">
+    <div class="modal-card">
+      <h3>
+        <span>⭐ Saved Favorite Expressions</span>
+        <button class="mini-btn modal-close-btn">✕</button>
+      </h3>
+      <div class="modal-list" id="favList"></div>
+    </div>
+  </div>
+
+  <!-- Topic Selector Modal -->
+  <div class="modal-overlay" id="topicModal">
+    <div class="modal-card">
+      <h3>
+        <span>▦ Choose Conversation Topic</span>
+        <button class="mini-btn modal-close-btn">✕</button>
+      </h3>
+      <div class="modal-list" id="topicList"></div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- App Script -->
+  <script src="js/app.js"></script>
+</body>
+</html>
