@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Mic, MicOff, Volume2, Globe, Sparkles, Check, Copy, Bookmark, BookmarkCheck,
-  RotateCcw, Play, Pause, Square, Repeat, MessageSquare, ArrowRight, X
+  Mic, MicOff, Volume2, Sparkles, Copy,
+  Play, Pause, Repeat, X
 } from 'lucide-react';
 
 interface VoicePracticeProps {
@@ -17,17 +17,17 @@ interface MessageItem {
 }
 
 export function VoicePractice({ onProgress }: VoicePracticeProps) {
-  // State
+  // Practice states
   const [level, setLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
   const [autoVoice, setAutoVoice] = useState(true);
   const [listening, setListening] = useState(false);
   const [micMode, setMicMode] = useState(false);
-  const [orbState, setOrbState] = useState<'idle' | 'speaking' | 'listening' | 'thinking' | 'paused' | 'stopped'>('idle');
-  const [orbCaption, setOrbCaption] = useState('Tap the microphone or choose a reply to start practising.');
-  const [currentTopic, setCurrentTopic] = useState('Daily life');
   const [speechRate, setSpeechRate] = useState(1.0);
-  const [practiceLang, setPracticeLang] = useState('en-US');
+  const [currentTopic, setCurrentTopic] = useState('Daily life');
+  const [orbState, setOrbState] = useState<'idle' | 'speaking' | 'listening' | 'thinking' | 'paused' | 'stopped'>('idle');
+  const [orbCaption, setOrbCaption] = useState('Tap the microphone or type a reply to start practising. The sky orb animates with the conversation.');
   const [supportLang, setSupportLang] = useState('hi');
+  const [practiceLang, setPracticeLang] = useState('en-US');
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState('default');
   const [isPaused, setIsPaused] = useState(false);
@@ -44,17 +44,19 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
   const [topicModalOpen, setTopicModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
+  const starterGreeting = "Hello! 👋 Welcome to your English practice session. Let's talk about your day.\n\nQuestion: What do you usually like to do in your free time?";
+
   const [messages, setMessages] = useState<MessageItem[]>([
     {
       id: 'm1',
       sender: 'ai',
-      text: "Hello! 👋 Welcome to your English speaking practice session. Let's talk about your daily life.\n\nQuestion: What do you usually like to do in your free time?",
+      text: starterGreeting,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
 
   const [currentQuestion, setCurrentQuestion] = useState('What do you usually like to do in your free time?');
-  const [lastAIReply, setLastAIReply] = useState("What do you usually like to do in your free time?");
+  const [lastAIReply, setLastAIReply] = useState('What do you usually like to do in your free time?');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -62,17 +64,17 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
   const silenceTimerRef = useRef<any>(null);
   const speechAccumulatorRef = useRef<string>('');
 
-  // Suggestions Dictionary (Original)
+  // Suggestions Dictionary matching user speaking level
   const suggestions: Record<string, Record<'Beginner' | 'Intermediate' | 'Advanced', string>> = {
     'free time': {
       Beginner: 'In my free time, I like playing cricket.',
       Intermediate: 'In my free time, I enjoy playing cricket with my friends because it keeps me active.',
       Advanced: 'During my leisure hours, I usually engage in cricket, which not only keeps me physically active but also hones my leadership skills.'
     },
-    'subject': {
-      Beginner: 'I like computer science.',
-      Intermediate: 'My favourite subject is computer science because I love solving logical problems.',
-      Advanced: 'I am passionate about computer science, especially software engineering and modern AI technologies.'
+    'cricket': {
+      Beginner: 'I play cricket every Sunday morning.',
+      Intermediate: 'Cricket is my favourite sport because it teaches teamwork and focus.',
+      Advanced: 'Competitive sports like cricket require both rigorous physical endurance and strategic foresight.'
     },
     'college': {
       Beginner: 'I study engineering in college.',
@@ -80,123 +82,142 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
       Advanced: 'I am an undergraduate student focused on mastering core engineering principles while building practical applications.'
     },
     'day': {
-      Beginner: 'My day was really good.',
-      Intermediate: 'My day was quite productive because I attended my classes and completed my assignments.',
-      Advanced: 'It was a fulfilling day; I managed to balance my academic schedule with some personal project development.'
+      Beginner: 'My day was really good and productive.',
+      Intermediate: 'My day was quite productive because I attended classes and finished my tasks.',
+      Advanced: 'It was a highly productive day; I managed to balance coursework with practical project implementation.'
     },
     'default': {
-      Beginner: 'I like learning English every day.',
+      Beginner: 'In my free time, I like playing cricket.',
       Intermediate: 'I want to improve my spoken English so that I can communicate confidently in my career.',
       Advanced: 'Developing strong communication skills is essential for effective cross-cultural collaboration and career growth.'
     }
   };
 
   const getSuggestion = () => {
-    const q = currentQuestion.toLowerCase();
-    for (const key of Object.keys(suggestions)) {
-      if (key !== 'default' && q.includes(key)) {
-        return suggestions[key][level];
-      }
+    const qLower = currentQuestion.toLowerCase();
+    if (qLower.includes('free time') || qLower.includes('spare time') || qLower.includes('hobby')) {
+      return suggestions['free time'][level];
     }
-    return suggestions.default[level];
+    if (qLower.includes('cricket') || qLower.includes('sport') || qLower.includes('game')) {
+      return suggestions['cricket'][level];
+    }
+    if (qLower.includes('college') || qLower.includes('study') || qLower.includes('major') || qLower.includes('engineering')) {
+      return suggestions['college'][level];
+    }
+    if (qLower.includes('day') || qLower.includes('today') || qLower.includes('feeling')) {
+      return suggestions['day'][level];
+    }
+    return suggestions['default'][level];
   };
 
+  // Toast Helper
   const showToast = (msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(msg);
-    clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastMessage(''), 2500);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage('');
+    }, 2800);
   };
 
-  // Populate Voices
+  // Sync favorites to local storage
+  useEffect(() => {
+    try {
+      localStorage.setItem('techai_favorites', JSON.stringify(favorites));
+    } catch {}
+  }, [favorites]);
+
+  // Load available browser TTS voices
   useEffect(() => {
     if (!('speechSynthesis' in window)) return;
     const updateVoices = () => {
-      setVoices(window.speechSynthesis.getVoices());
+      const v = window.speechSynthesis.getVoices();
+      setVoices(v);
     };
     updateVoices();
     window.speechSynthesis.onvoiceschanged = updateVoices;
-    return () => {
-      window.speechSynthesis.cancel();
-    };
   }, []);
 
-  // Scroll to bottom on new message
+  // Auto-scroll messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, orbState]);
 
-  // Save favorites
-  useEffect(() => {
-    localStorage.setItem('techai_favorites', JSON.stringify(favorites));
-  }, [favorites]);
+  // Polite grammar checking
+  const checkGrammar = (text: string): string | null => {
+    const t = text.trim();
+    if (/\bi\s+(is|am\s+play|go\s+yesterday)\b/i.test(t)) {
+      return 'Helpful tip: Use "I am" or "I went yesterday" for natural past tense.';
+    }
+    if (/\bhe\s+don't\b/i.test(t)) {
+      return 'Helpful tip: "He doesn\'t" is standard for third-person singular.';
+    }
+    if (/\bi\s+like\s+play\b/i.test(t)) {
+      return 'Polite upgrade: In natural English, say "I like playing cricket" or "I like to play cricket".';
+    }
+    return null;
+  };
 
-  // Speech playback
-  const readText = (text: string, onComplete?: () => void) => {
+  // Text-To-Speech with animated living sky orb
+  const readText = (text: string) => {
     if (!('speechSynthesis' in window)) {
-      showToast('Speech playback is not supported in this browser.');
-      onComplete?.();
+      showToast('Speech synthesis is not supported on this browser.');
       return;
     }
-
     window.speechSynthesis.cancel();
-    setIsPaused(false);
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = practiceLang;
+    const cleanText = text.replace(/[*#_~]/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = speechRate;
 
+    // Select matched voice
     if (selectedVoice !== 'default') {
-      const v = voices[Number(selectedVoice)];
-      if (v) utterance.voice = v;
+      const idx = Number(selectedVoice);
+      if (voices[idx]) utterance.voice = voices[idx];
     } else {
-      const match = voices.find(v => v.lang === practiceLang) ||
-                    voices.find(v => v.lang.startsWith(practiceLang.slice(0, 2)));
-      if (match) utterance.voice = match;
+      const preferred = voices.find(v => v.lang.startsWith(practiceLang.slice(0, 2)) && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Online')));
+      if (preferred) utterance.voice = preferred;
     }
 
     utterance.onstart = () => {
       setOrbState('speaking');
-      setOrbCaption('Listen carefully to pronunciation, then try repeating.');
+      setOrbCaption('AI is speaking… The sky orb flows with the voice.');
+      setIsPaused(false);
+    };
+
+    utterance.onpause = () => {
+      setOrbState('paused');
+      setIsPaused(true);
+    };
+
+    utterance.onresume = () => {
+      setOrbState('speaking');
+      setIsPaused(false);
     };
 
     utterance.onend = () => {
       setOrbState('idle');
-      setOrbCaption('Tap the microphone or choose a reply to start practising.');
-      onComplete?.();
+      setOrbCaption('AI is ready. Tap the microphone or type a reply to practise.');
+      setIsPaused(false);
+
+      // If continuous mic mode is active, resume listening after speech completes
+      if (micMode) {
+        setTimeout(() => {
+          startListening();
+        }, 500);
+      }
     };
 
     utterance.onerror = () => {
       setOrbState('idle');
-      setOrbCaption('Playback encountered an issue.');
-      onComplete?.();
+      setOrbCaption('Speech playback encountered a browser pause.');
+      setIsPaused(false);
     };
 
     window.speechSynthesis.speak(utterance);
   };
 
-  // Evaluate grammar mistakes politely
-  const checkGrammar = (raw: string) => {
-    const lower = raw.toLowerCase().trim();
-    if (/\bi am agree\b/i.test(lower)) {
-      return 'Say “I agree” instead of “I am agree”. In English, “agree” is already a verb.';
-    }
-    if (/\bi likes\b/i.test(lower)) {
-      return 'Use “I like” with the first person (e.g. “I like reading”, not “I likes”).';
-    }
-    if (/\bmyself\s+[a-z]+/i.test(lower)) {
-      return 'In English introductions, say “My name is …” or “I am …” instead of “Myself …”.';
-    }
-    if (/\bhe go\b/i.test(lower)) {
-      return 'With third-person singular (he/she/it), use “goes” (e.g. “He goes to college”).';
-    }
-    if (/\bi have\s+\d+\s+years\b/i.test(lower)) {
-      return 'For age, say “I am … years old” rather than “I have … years”.';
-    }
-    return '';
-  };
-
-  // Generate dynamic response based on level
-  const generateAIResponse = (userText: string) => {
+  // Generate dynamic AI responses tailored to selected level
+  const generateAIResponse = (userText: string): string => {
     const t = userText.toLowerCase();
 
     if (/cricket|football|game|sport|play/.test(t)) {
@@ -271,53 +292,52 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
       };
 
       setMessages(prev => [...prev, aiMsg]);
+      onProgress?.('lesson', 'English Speaking Practice', `Practiced ${level} conversational English`);
 
       if (autoVoice) {
-        readText(reply, () => {
-          if (micMode) startListening();
-        });
+        readText(reply);
       } else {
         setOrbState('idle');
-        setOrbCaption('Tap the microphone or choose a reply to start practising.');
-        if (micMode) startListening();
+        setOrbCaption('AI is ready. Tap the microphone or type a reply to practise.');
       }
-
-      onProgress?.('lesson', 'English Practice', `Practised speaking: "${text.slice(0, 30)}…"`);
-    }, 700);
+    }, 650);
   };
 
-  // Non-interruptive Microphone Recognition:
-  // Listens continuously until user finishes speaking (1.5s silence debounce), then sends!
+  // Continuous speech recognition that waits until the user finishes talking
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      showToast('Speech recognition is not supported in this browser. Please type.');
+      showToast('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
       setMicMode(false);
       return;
     }
 
     try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+
       const rec = new SpeechRecognition();
       recognitionRef.current = rec;
-      rec.lang = practiceLang;
       rec.continuous = true;
       rec.interimResults = true;
+      rec.lang = practiceLang;
 
       rec.onstart = () => {
         setListening(true);
         setOrbState('listening');
-        setOrbCaption('Listening… Please speak your full sentence without rushing.');
+        setOrbCaption('Listening to you speak… Take your time, AI will not interrupt.');
       };
 
-      rec.onresult = (e: any) => {
+      rec.onresult = (event: any) => {
         let interimTranscript = '';
         let finalTranscript = '';
 
-        for (let i = e.resultIndex; i < e.results.length; ++i) {
-          if (e.results[i].isFinal) {
-            finalTranscript += e.results[i][0].transcript;
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
           } else {
-            interimTranscript += e.results[i][0].transcript;
+            interimTranscript += event.results[i][0].transcript;
           }
         }
 
@@ -332,7 +352,7 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
             clearTimeout(silenceTimerRef.current);
           }
 
-          // Wait 1.5s of silence after speaking to ensure user has finished their sentence
+          // Wait 1.6s of silence after speaking to ensure user has completed sentence
           silenceTimerRef.current = setTimeout(() => {
             const completePhrase = speechAccumulatorRef.current.trim();
             if (completePhrase) {
@@ -341,7 +361,7 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
               setListening(false);
               handleSend(completePhrase);
             }
-          }, 1500);
+          }, 1600);
         }
       };
 
@@ -392,12 +412,30 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
       hi: `🇮🇳 हिंदी में अर्थ / व्याख्या:
 "${sentence}"
 यह सवाल आपसे आपके विचारों या अनुभवों को शेयर करने के लिए पूछा गया है। आप सरल और पूरे वाक्यों में जवाब दे सकते हैं।`,
+      bn: `🇧🇩 বাংলায় অর্থ / ব্যাখ্যা:
+"${sentence}"
+এই প্রশ্নটি আপনার অভিজ্ঞতা এবং মতামত শেয়ার করার জন্য জিজ্ঞেস করা হয়েছে।`,
+      ta: `🇮🇳 தமிழில் விளக்கம்:
+"${sentence}"
+இந்த கேள்வி உங்கள் கருத்துக்களை பகிர்ந்து கொள்ள கேட்கப்பட்டுள்ளது.`,
+      te: `🇮🇳 తెలుగులో వివరణ:
+"${sentence}"
+ఈ ప్రశ్న మీ అనుభవాలను పంచుకోవడానికి అడగబడింది.`,
+      mr: `🇮🇳 मराठीत अर्थ / स्पष्टीकरण:
+"${sentence}"
+हा प्रश्न तुमचे अनुभव आणि विचार मांडण्यासाठी विचारला गेला आहे.`,
+      gu: `🇮🇳 ગુજરાતીમાં અર્થ:
+"${sentence}"
+આ પ્રશ્ન તમારા વિચારો વ્યક્ત કરવા માટે પૂછવામાં આવ્યો છે.`,
       en: `💡 Explanation:
 "${sentence}"
 This question invites you to share your thoughts. Try responding in 1 or 2 complete sentences with an example.`,
       es: `🇪🇸 Explicación:
 "${sentence}"
 Esta pregunta te invita a compartir tus ideas.`,
+      fr: `🇫🇷 Explication:
+"${sentence}"
+Cette question vous invite à partager vos idées.`
     };
 
     const exp = explanations[supportLang] || explanations.hi;
@@ -412,7 +450,7 @@ Esta pregunta te invita a compartir tus ideas.`,
     ]);
   };
 
-  // Select Topic (Original)
+  // Select Topic
   const handleSelectTopic = (top: string) => {
     setCurrentTopic(top);
     setTopicModalOpen(false);
@@ -423,27 +461,34 @@ Esta pregunta te invita a compartir tus ideas.`,
       'Hobbies & sports': 'Great choice! What hobby or sport brings you the most joy when you have free time?',
       'Travel & culture': 'Travel is exciting! If you could travel to any place in the world tomorrow, where would you go?',
       'Job interviews': 'Interview practice mode: Can you introduce yourself and tell me why you chose your field of study?',
-      'Food & cooking': 'Food is a great topic! What is your all-time favorite meal, and can you cook it yourself?',
-      'Technology & AI': 'Technology session started! In what ways do you use computers or smartphone apps to study better?',
-      'Friendship & family': 'Let’s discuss friendship! What qualities do you value most in a close friend?'
+      'Food & cooking': 'Food is a universal topic! What is your favorite dish to eat or cook?',
+      'Technology & AI': 'Tech & AI: What exciting technology or tool do you use most frequently every day?',
+      'Friendship & family': 'Let’s talk about people close to you: What quality do you value most in a true friend?'
     };
 
-    const q = starters[top] || `Let’s practice discussing ${top}! What is your opinion on this topic?`;
+    const q = starters[top] || `Let's talk about ${top}! What are your thoughts on this?`;
     setCurrentQuestion(q);
     setLastAIReply(q);
 
     setMessages(prev => [
       ...prev,
       {
-        id: `ai-top-${Date.now()}`,
+        id: `topic-${Date.now()}`,
         sender: 'ai',
-        text: `🎯 Topic changed to: ${top}.\n\n${q}`,
+        text: `Topic changed to: ${top}\n\n${q}`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
 
     if (autoVoice) readText(q);
     showToast(`Topic set to: ${top}`);
+  };
+
+  // Pick random topic
+  const pickRandomTopic = () => {
+    const list = topicsList.filter(t => t !== currentTopic);
+    const chosen = list[Math.floor(Math.random() * list.length)] || 'Hobbies & sports';
+    handleSelectTopic(chosen);
   };
 
   // Voice Controls
@@ -488,7 +533,7 @@ Esta pregunta te invita a compartir tus ideas.`,
 
   const resetSession = () => {
     if (!confirm('Start a fresh practice session? Previous messages will be cleared.')) return;
-    const starter = `Welcome back! Let’s practise talking about ${currentTopic}. How are you feeling right now?`;
+    const starter = `Welcome back! Let's practise talking about ${currentTopic}. How are you feeling right now?`;
     setCurrentQuestion(starter);
     setLastAIReply(starter);
     setMessages([
@@ -528,46 +573,46 @@ Esta pregunta te invita a compartir tus ideas.`,
 
   return (
     <div className="voice-studio-container">
-      {/* Top action toolbar (Without the ZIP download button) */}
-      <div className="voice-studio-topbar">
-        <div className="voice-studio-badge">
-          <span className="voice-pulse-dot" />
-          <span>English Practice · AI Coach</span>
+      {/* Top Header Bar Matching Image 2 */}
+      <header className="voice-header-bar">
+        <div className="brand">
+          <div className="brand-avatar">N</div>
+          <div>
+            <div className="brand-title">NEXORA-07 / Voice Studio</div>
+            <div className="brand-sub">Speak. Learn. Grow.</div>
+          </div>
         </div>
-        <div className="voice-studio-actions">
-          <button type="button" className="pill-btn" onClick={() => setTopicModalOpen(true)}>
-            ▦ Topics
+        <div className="actions">
+          <button type="button" className="pill pill-topic" onClick={() => setTopicModalOpen(true)}>
+            ▦ Topic
           </button>
-          <button type="button" className="pill-btn" onClick={() => explainInLanguage(lastAIReply)}>
-            文 Hindi Meaning
+          <button type="button" className="pill pill-translate" onClick={() => explainInLanguage(lastAIReply)}>
+            文 Translate
           </button>
-          <button type="button" className="pill-btn" onClick={() => setFavModalOpen(true)}>
-            ▮ Favorites ({favorites.length})
-          </button>
-          <button type="button" className="pill-btn" onClick={resetSession}>
-            ＋ New Session
+          <button type="button" className="pill pill-new" onClick={resetSession}>
+            + New chat
           </button>
         </div>
-      </div>
+      </header>
 
       {/* Main Studio Dual-Panel Grid: LEFT = Visualizer, RIGHT = Conversation */}
       <div className="voice-studio-grid">
         {/* ============================================================== */}
         {/* LEFT PANEL: AI Voice Visualizer (Laptop / Desktop LEFT)          */}
         {/* ============================================================== */}
-        <div className="panel voice-visualizer-card">
-          <div className="visualizer-card-header">
+        <aside className="panel voice-visualizer-card">
+          <div className="right-head">
             <div>
-              <h3>AI Voice Visualizer</h3>
-              <p className="sub">Your conversation, brought to life</p>
+              <h2>AI Voice Visualizer</h2>
+              <div className="sub">Your conversation, brought to life</div>
             </div>
             <select
-              className="select-voice-dropdown"
+              className="select select-voice"
               value={selectedVoice}
               onChange={(e) => setSelectedVoice(e.target.value)}
-              aria-label="Select AI Voice"
+              aria-label="AI voice"
             >
-              <option value="default">✨ Default Voice</option>
+              <option value="default">✨ Default voice</option>
               {voices.map((v, i) => (
                 <option key={v.voiceURI || i} value={String(i)}>
                   {v.name} ({v.lang})
@@ -576,7 +621,7 @@ Esta pregunta te invita a compartir tus ideas.`,
             </select>
           </div>
 
-          {/* Compact Sky-Blue & Cyan AI Orb (Smooth Gemini Swirl) */}
+          {/* Large Living Sky-Blue Orb Matching Image 1 */}
           <div className={`orb-wrap ${orbState}`}>
             <div className="orb-halo" />
             <div className="orb-wave" />
@@ -601,7 +646,7 @@ Esta pregunta te invita a compartir tus ideas.`,
           </div>
 
           {/* State & Dynamic Caption */}
-          <div className="orb-state-text">
+          <div className="orb-state">
             {orbState === 'speaking' && 'AI is speaking…'}
             {orbState === 'listening' && 'Listening to you…'}
             {orbState === 'thinking' && 'Thinking & analyzing…'}
@@ -609,118 +654,184 @@ Esta pregunta te invita a compartir tus ideas.`,
             {orbState === 'stopped' && 'Speech stopped'}
             {orbState === 'idle' && 'AI is ready'}
           </div>
-          <p className="orb-caption-text">{orbCaption}</p>
+          <div className="orb-caption">{orbCaption}</div>
 
-          {/* Controls: Stop, Pause/Resume, Repeat, Voice Toggle */}
-          <div className="voice-controls-grid">
+          {/* Primary Controls Matching Image 1 */}
+          <div className="visual-controls">
             <button
               type="button"
-              className="ctrl-btn"
+              className="control"
+              id="stopBtn"
               onClick={handleStopSpeech}
               title="Stop audio playback immediately"
             >
-              <Square size={14} /> Stop
+              ■ Stop speech
             </button>
             <button
               type="button"
-              className="ctrl-btn"
-              onClick={handlePauseResume}
-              title="Pause or Resume speech"
-            >
-              {isPaused ? <Play size={14} /> : <Pause size={14} />}
-              {isPaused ? 'Resume' : 'Pause'}
-            </button>
-            <button
-              type="button"
-              className="ctrl-btn"
-              onClick={handleRepeat}
-              title="Repeat the last spoken sentence"
-            >
-              <Repeat size={14} /> Repeat
-            </button>
-            <button
-              type="button"
-              className={`ctrl-btn ${autoVoice ? 'active' : ''}`}
+              className={`control primary ${autoVoice ? 'on' : ''}`}
+              id="autoBtn"
               onClick={() => {
                 setAutoVoice(!autoVoice);
                 showToast(autoVoice ? 'Auto-voice speech turned OFF' : 'Auto-voice speech turned ON');
               }}
               title="Toggle automatic speech playback"
             >
-              <Volume2 size={14} /> {autoVoice ? 'Voice ON' : 'Voice OFF'}
+              ● AI Voice: {autoVoice ? 'On' : 'Off'}
             </button>
           </div>
 
-          {/* Rate Slider & Help info */}
-          <div className="voice-rate-box">
-            <div className="rate-label-row">
-              <span>Speaking Speed</span>
-              <b>{speechRate.toFixed(1)}x</b>
+          {/* Practice & Explanation Language Box Matching Image 1 */}
+          <div className="language-box">
+            <div className="lang-title">
+              <span>🌐 Practice language</span>
+              <span className="choose-lang-sub">Choose language</span>
             </div>
-            <input
-              type="range"
-              min="0.6"
-              max="1.4"
-              step="0.1"
-              value={speechRate}
-              onChange={(e) => setSpeechRate(Number(e.target.value))}
-              className="rate-slider"
-            />
-            <div className="rate-tags">
-              <span>Slower (0.6x)</span>
-              <span>Normal (1.0x)</span>
-              <span>Faster (1.4x)</span>
+            <div className="lang-row">
+              <select
+                className="select"
+                value={practiceLang}
+                onChange={(e) => {
+                  setPracticeLang(e.target.value);
+                  showToast(`Practice language set to ${e.target.value}`);
+                }}
+                aria-label="Practice language"
+              >
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="en-IN">English (India)</option>
+                <option value="en-AU">English (Australia)</option>
+                <option value="en-CA">English (Canada)</option>
+              </select>
+              <select
+                className="select"
+                value={supportLang}
+                onChange={(e) => {
+                  setSupportLang(e.target.value);
+                  showToast(`Explanation language set to ${e.target.value}`);
+                }}
+                aria-label="Explanation language"
+              >
+                <option value="hi">Explain in Hindi</option>
+                <option value="en">Explain in English</option>
+                <option value="bn">Explain in Bengali</option>
+                <option value="ta">Explain in Tamil</option>
+                <option value="te">Explain in Telugu</option>
+                <option value="mr">Explain in Marathi</option>
+                <option value="gu">Explain in Gujarati</option>
+                <option value="es">Explain in Spanish</option>
+                <option value="fr">Explain in French</option>
+              </select>
             </div>
           </div>
-        </div>
+
+          {/* Secondary Controls: Pause, Resume, Repeat & Speaking Speed */}
+          <div className="secondary-voice-controls">
+            <div className="secondary-btn-row">
+              <button
+                type="button"
+                className="sec-ctrl-btn"
+                onClick={handlePauseResume}
+                title="Pause or Resume speech"
+              >
+                {isPaused ? <Play size={12} /> : <Pause size={12} />}
+                <span>{isPaused ? 'Resume' : 'Pause'}</span>
+              </button>
+              <button
+                type="button"
+                className="sec-ctrl-btn"
+                onClick={handleRepeat}
+                title="Repeat the last sentence"
+              >
+                <Repeat size={12} />
+                <span>Repeat</span>
+              </button>
+            </div>
+            <div className="voice-speed-row">
+              <span>Speed: <b>{speechRate.toFixed(1)}x</b></span>
+              <input
+                type="range"
+                min="0.6"
+                max="1.4"
+                step="0.1"
+                value={speechRate}
+                onChange={(e) => setSpeechRate(Number(e.target.value))}
+                className="speed-slider"
+              />
+            </div>
+          </div>
+
+          <div className="footnote">
+            Microphone and speech features depend on your browser. AI replies in this preview are conversational practice responses.
+          </div>
+        </aside>
 
         {/* ============================================================== */}
         {/* RIGHT PANEL: Conversation Panel (Laptop / Desktop RIGHT)        */}
         {/* ============================================================== */}
-        <div className="panel voice-conversation-card">
-          <div className="conversation-card-header">
+        <section className="panel chat-panel voice-conversation-card">
+          <div className="panel-head">
             <div>
-              <h3>Conversation</h3>
-              <p className="sub">Level: {level} · Topic: {currentTopic}</p>
+              <h2>Conversation</h2>
+              <div className="sub">Practise speaking with your AI tutor</div>
             </div>
-            {/* Level Selector Tabs */}
-            <div className="level-tabs-container">
-              {(['Beginner', 'Intermediate', 'Advanced'] as const).map((lvl) => (
-                <button
-                  key={lvl}
-                  type="button"
-                  className={`level-tab-btn ${level === lvl ? 'active' : ''}`}
-                  onClick={() => {
-                    setLevel(lvl);
-                    showToast(`Level set to: ${lvl}`);
-                  }}
-                >
-                  {lvl}
-                </button>
-              ))}
+            <div className="status">
+              <span className="dot" />
+              <span>Ready to practise</span>
             </div>
           </div>
 
-          {/* Chat Messages Log */}
-          <div className="chat-messages-scroll" role="log" aria-live="polite">
-            {messages.map((m) => (
-              <div key={m.id} className={`chat-message-bubble ${m.sender}`}>
-                <div className="bubble-meta">
-                  <span className="bubble-sender">
-                    {m.sender === 'ai' ? '🤖 AI English Coach' : '👤 You'}
-                  </span>
-                  <span className="bubble-time">{m.time}</span>
-                </div>
-                <div className="bubble-text">
-                  {m.text.split('\n').map((line, idx) => (
-                    <p key={idx}>{line}</p>
-                  ))}
-                </div>
+          {/* Quick Toolbar Matching Image 2 */}
+          <div className="toolbar">
+            <button
+              type="button"
+              className="tool"
+              id="changeBtn"
+              onClick={pickRandomTopic}
+              title="Switch conversation topic"
+            >
+              ⇄ Change topic
+            </button>
+            <button
+              type="button"
+              className="tool"
+              id="topicBtn"
+              onClick={() => setTopicModalOpen(true)}
+              title="Browse topic list"
+            >
+              ▦ Topic
+            </button>
+            <button
+              type="button"
+              className="tool"
+              id="translateBtn"
+              onClick={() => explainInLanguage(lastAIReply)}
+              title="Translate current question"
+            >
+              文 Translate
+            </button>
+            <button
+              type="button"
+              className="tool"
+              id="favoriteView"
+              onClick={() => setFavModalOpen(true)}
+              title="View saved favorites"
+            >
+              ▮ Favorites {favorites.length}
+            </button>
+          </div>
 
-                {/* Polite Grammar Correction Card */}
+          {/* Messages Container Matching Image 2 */}
+          <div className="messages" role="log" aria-live="polite">
+            {messages.map((m) => (
+              <div key={m.id} className={`msg ${m.sender}`}>
+                <span className="sender">{m.sender === 'ai' ? 'Nexora AI · now' : 'You · now'}</span>
+                <div className="bubble">{m.text}</div>
+
+                {/* Grammar Correction Tip */}
                 {m.correction && (
-                  <div className="grammar-correction-card">
-                    <div className="grammar-head">
+                  <div className="grammar-tip-pill">
+                    <div className="grammar-header">
                       <Sparkles size={13} />
                       <span>Polite Grammar Tip</span>
                     </div>
@@ -728,82 +839,91 @@ Esta pregunta te invita a compartir tus ideas.`,
                   </div>
                 )}
 
-                {/* Message Quick Actions */}
-                <div className="bubble-actions">
+                {/* Message Quick Actions Matching Image 2 */}
+                <div className="msg-actions">
                   <button
                     type="button"
-                    className="bubble-action-btn"
+                    className="mini"
                     onClick={() => readText(m.text)}
-                    title="Listen to this sentence"
+                    title="Listen to sentence"
                   >
-                    <Volume2 size={13} />
+                    <Volume2 size={12} /> Read
                   </button>
                   <button
                     type="button"
-                    className="bubble-action-btn"
-                    onClick={() => copyText(m.text)}
-                    title="Copy text"
+                    className="mini"
+                    onClick={() => explainInLanguage(m.text)}
+                    title="Translate to explanation language"
                   >
-                    <Copy size={13} />
+                    文 Translate
                   </button>
                   <button
                     type="button"
-                    className="bubble-action-btn"
+                    className="mini"
                     onClick={() => toggleFavorite(m.text)}
                     title={favorites.includes(m.text) ? 'Saved' : 'Save as favorite'}
                   >
-                    {favorites.includes(m.text) ? (
-                      <BookmarkCheck size={13} className="fav-active" />
-                    ) : (
-                      <Bookmark size={13} />
-                    )}
+                    {favorites.includes(m.text) ? '★ Favorited' : '▮ Favorite'}
                   </button>
-                  {m.sender === 'ai' && (
-                    <button
-                      type="button"
-                      className="bubble-action-btn text-btn"
-                      onClick={() => explainInLanguage(m.text)}
-                    >
-                      हिन्दी में समझें
-                    </button>
-                  )}
                 </div>
               </div>
             ))}
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Suggestion Reply Box & Composer */}
-          <div className="chat-composer-box">
-            {/* Suggested Reply Pill */}
-            <div className="suggested-reply-wrap">
-              <span className="suggest-label">💡 Suggested reply for {level}:</span>
-              <p className="suggest-text">"{getSuggestion()}"</p>
-              <div className="suggest-actions">
+          {/* Composer: Level selector, Suggestion pill, and Send row */}
+          <div className="composer">
+            <p className="level-label">CHOOSE YOUR SPEAKING LEVEL</p>
+            <div className="levels">
+              {(['Beginner', 'Intermediate', 'Advanced'] as const).map((lvl) => (
                 <button
+                  key={lvl}
                   type="button"
-                  className="suggest-btn"
-                  onClick={() => readText(getSuggestion())}
-                  title="Listen to pronunciation"
+                  className={`level ${level === lvl ? 'selected' : ''}`}
+                  onClick={() => {
+                    setLevel(lvl);
+                    showToast(`Speaking level set to: ${lvl}`);
+                  }}
                 >
-                  <Volume2 size={13} /> Listen
+                  <b>
+                    {lvl === 'Beginner' && '🌱 Beginner'}
+                    {lvl === 'Intermediate' && '✨ Intermediate'}
+                    {lvl === 'Advanced' && '🚀 Advanced'}
+                  </b>
+                  <small>
+                    {lvl === 'Beginner' && 'Simple & short'}
+                    {lvl === 'Intermediate' && 'Natural sentences'}
+                    {lvl === 'Advanced' && 'Fluent & detailed'}
+                  </small>
                 </button>
-                <button
-                  type="button"
-                  className="suggest-btn suggest-use-btn"
-                  onClick={() => setInputVal(getSuggestion())}
-                >
-                  Use reply
-                </button>
-              </div>
+              ))}
             </div>
 
-            {/* Send Row */}
-            <div className="composer-send-row">
+            {/* Suggestion Pill Matching Image 2 */}
+            <div className="suggestion">
+              <div className="suggestion-text">"{getSuggestion()}"</div>
+              <button
+                type="button"
+                onClick={() => readText(getSuggestion())}
+                title="Listen to pronunciation"
+              >
+                <Volume2 size={13} />
+              </button>
+              <button
+                type="button"
+                className="suggest-use-btn"
+                onClick={() => setInputVal(getSuggestion())}
+              >
+                Use reply
+              </button>
+            </div>
+
+            {/* Send Row Matching Image 2 */}
+            <div className="sendrow">
               <input
                 type="text"
-                className="composer-input"
-                placeholder="Type your sentence or tap the mic to speak…"
+                className="text-input"
+                placeholder="Type your answer or tap the mic…"
                 value={inputVal}
                 onChange={(e) => setInputVal(e.target.value)}
                 onKeyDown={(e) => {
@@ -815,23 +935,23 @@ Esta pregunta te invita a compartir tus ideas.`,
               />
               <button
                 type="button"
-                className={`composer-mic-btn ${micMode ? 'active' : ''}`}
+                className={`mic ${micMode ? 'listening' : ''}`}
                 onClick={toggleMic}
-                title={micMode ? 'Turn off mic' : 'Turn on microphone (will not interrupt while you speak)'}
+                title={micMode ? 'Turn off mic' : 'Tap to speak (will not interrupt while you speak)'}
               >
-                {micMode ? <MicOff size={18} /> : <Mic size={18} />}
+                🎙️
               </button>
               <button
                 type="button"
-                className="composer-send-btn"
+                className="send"
                 onClick={() => handleSend()}
                 disabled={!inputVal.trim() && orbState === 'thinking'}
               >
-                Send <ArrowRight size={14} />
+                Send ↑
               </button>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
       {/* Topic Picker Modal */}

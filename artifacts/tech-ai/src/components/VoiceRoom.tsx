@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Radio, Mic, MicOff, Users, Hand, MessageSquare, Share2, LogOut, Plus,
+  Mic, MicOff, Hand, MessageSquare, Share2, LogOut, Plus,
   Trophy, Sparkles, Volume2, Globe, Heart, Flame, ThumbsUp, Send, X,
-  Check, Copy, Shield, Award, AudioLines
+  Check, Copy, Shield, Award, AudioLines, MoreHorizontal, Radio, Bell,
+  Sparkle, Compass
 } from 'lucide-react';
 
 export interface VoiceRoomProps {
@@ -34,6 +35,7 @@ interface RoomItem {
   listenerCount: number;
   speakers: Speaker[];
   tags: string[];
+  pinnedMessage?: string;
 }
 
 interface ChatMessage {
@@ -45,15 +47,19 @@ interface ChatMessage {
   text: string;
   time: string;
   isNotice?: boolean;
+  isPinned?: boolean;
 }
 
 export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: VoiceRoomProps) {
   // Current view: lobby or inside a room
   const [activeRoom, setActiveRoom] = useState<RoomItem | null>(null);
-  const [activeTab, setActiveTab] = useState<'All' | 'English' | 'Hindi' | 'Interaction' | 'Exam Prep'>('All');
+  const [topTab, setTopTab] = useState<'Voice' | 'Live' | 'Learn'>('Voice');
+  const [categoryTab, setCategoryTab] = useState<string>('All');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [showQuickChips, setShowQuickChips] = useState(true);
 
   // Inside-room interactive states
   const [mySeat, setMySeat] = useState<number | null>(null); // null = audience, 0..7 = stage seat
@@ -61,6 +67,8 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [floatingEmojis, setFloatingEmojis] = useState<{ id: number; emoji: string; left: number }[]>([]);
+  const [showCC, setShowCC] = useState(false);
+  const [liveCaption, setLiveCaption] = useState('');
 
   // Form states for creating a room
   const [newRoomTitle, setNewRoomTitle] = useState('');
@@ -70,10 +78,10 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   // Room messages
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
 
-  // Pre-populated realistic English practice rooms (matching HelloTalk screenshots)
+  // Pre-populated realistic English practice rooms (matching HelloTalk screenshots 3 & 4)
   const [rooms, setRooms] = useState<RoomItem[]>([
     {
       id: 'room-1',
@@ -84,62 +92,85 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       hostName: 'MH SA',
       hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       hostFlag: '🇰🇷',
-      listenerCount: 42,
-      tags: ['#English Learning', '#Global Friends', '#Daily Speaking'],
+      listenerCount: 40,
+      tags: ['#English Learning', '#Global Lounge', '#Fluency Practice'],
+      pinnedMessage: 'If you speak English or want to practice, you can come up on stage! Everyone is welcome.',
       speakers: [
-        { id: 's1', name: 'MH SA', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', flag: '🇰🇷', isHost: true, isSpeaking: true, isMuted: false, level: 'Lv.15' },
-        { id: 's2', name: 'Cephas 石谦', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, isMuted: false, level: 'Lv.12' },
-        { id: 's3', name: 'Tayla', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', flag: '🇬🇧', isSpeaking: false, isMuted: true, level: 'Lv.10' },
-        { id: 's4', name: 'Arjun M.', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isSpeaking: false, isMuted: false, level: 'Lv.8' }
+        { id: 's1', name: 'MH SA', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', flag: '🇰🇷', isHost: true, isSpeaking: false, isMuted: false, level: 'Lv.15' },
+        { id: 's2', name: 'Cephas 石谦', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, isMuted: true, level: 'Lv.12' },
+        { id: 's3', name: 'Tayla', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', flag: '🇬🇧', isSpeaking: false, isMuted: false, level: 'Lv.10' },
+        { id: 's4', name: 'WW', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: true, isMuted: false, level: 'Lv.16' }
       ]
     },
     {
       id: 'room-2',
-      title: 'English Chat 💬 - Confidence Builder',
-      category: 'English',
+      title: 'No Jihadis · Peaceful Discussion & English Chat',
+      category: 'Interaction',
       badge: 'EN',
-      hourlyRank: 'Hot 🔥',
-      hostName: 'Anthony 安瀚辰',
-      hostAvatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80',
-      hostFlag: '🇺🇸',
-      listenerCount: 28,
-      tags: ['#English Learning', '#Confidence', '#Fluency'],
+      hourlyRank: 'Live 🔥',
+      hostName: 'Hills',
+      hostAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
+      hostFlag: '🇬🇭',
+      listenerCount: 14,
+      tags: ['#Bunka-no-Hi', '#Cultural Exchange', '#Respectful Debates'],
+      pinnedMessage: 'Hills: If you speak English, you can come to stage and introduce yourself.',
       speakers: [
-        { id: 's5', name: 'Anthony 安瀚辰', avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isHost: true, isSpeaking: true, level: 'Lv.14' },
-        { id: 's6', name: 'Priya S.', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isSpeaking: false, level: 'Lv.9' },
-        { id: 's7', name: 'Kenji', avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80', flag: '🇯🇵', isSpeaking: false, level: 'Lv.11' }
+        { id: 's5', name: 'Hills', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80', flag: '🇬🇭', isHost: true, isSpeaking: false, isMuted: false, level: 'Lv.10' },
+        { id: 's6', name: 'Cephas 石谦', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, isMuted: true, level: 'Lv.20' },
+        { id: 's7', name: 'Tayla', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', flag: '🇬🇧', isSpeaking: false, isMuted: false, level: 'Lv.10' },
+        { id: 's8', name: 'WW', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: true, isMuted: false, level: 'Lv.16' }
       ]
     },
     {
       id: 'room-3',
-      title: 'College GD & Job Interview Practice',
-      category: 'Exam Prep',
-      badge: 'GD',
-      hourlyRank: 'Popular',
-      hostName: 'Rohan Verma',
-      hostAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
-      hostFlag: '🇮🇳',
+      title: 'English chat 💬 - Daily Confidence Lab',
+      category: 'English',
+      badge: 'EN',
+      hourlyRank: 'Active ⭐',
+      hostName: 'anthony 安瀚辰',
+      hostAvatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80',
+      hostFlag: '🇺🇸',
       listenerCount: 21,
-      tags: ['#Interview Prep', '#Group Discussion', '#Placement'],
+      tags: ['#English Learning', '#Confidence', '#Fluency'],
+      pinnedMessage: 'Welcome! Today we talk about daily routines and college life.',
       speakers: [
-        { id: 's8', name: 'Rohan Verma', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isHost: true, isSpeaking: true, level: 'Lv.11' },
-        { id: 's9', name: 'Aakash K.', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isSpeaking: false, level: 'Lv.7' }
+        { id: 's9', name: 'anthony 安瀚辰', avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isHost: true, isSpeaking: true, level: 'Lv.14' },
+        { id: 's10', name: 'Priya S.', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isSpeaking: false, level: 'Lv.9' },
+        { id: 's11', name: 'Kenji', avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80', flag: '🇯🇵', isSpeaking: false, level: 'Lv.11' }
       ]
     },
     {
       id: 'room-4',
-      title: 'Life & Hobbies without Screen Addiction',
-      category: 'Interaction',
+      title: 'Life without TikTok & Social Media',
+      category: 'English',
       badge: 'EN',
-      hourlyRank: 'Live',
+      hourlyRank: 'Top Discussion',
       hostName: 'Nadir',
       hostAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
       hostFlag: '🇺🇿',
       listenerCount: 18,
-      tags: ['#Casual Chat', '#Daily Life', '#Mindfulness'],
+      tags: ['#English Learning', '#Digital Well-being', '#Focus'],
+      pinnedMessage: 'How do you spend your free time when you stay off short videos?',
       speakers: [
-        { id: 's10', name: 'Nadir', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80', flag: '🇺🇿', isHost: true, isSpeaking: false, level: 'Lv.9' },
-        { id: 's11', name: 'Emma Watson', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80', flag: '🇨🇦', isSpeaking: true, level: 'Lv.13' }
+        { id: 's12', name: 'Nadir', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80', flag: '🇺🇿', isHost: true, isSpeaking: false, level: 'Lv.9' },
+        { id: 's13', name: 'Emma Watson', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80', flag: '🇨🇦', isSpeaking: true, level: 'Lv.13' }
+      ]
+    },
+    {
+      id: 'room-5',
+      title: 'Help Me Translate · Hindi & English Language Exchange',
+      category: 'Hindi',
+      badge: 'EN',
+      hourlyRank: 'Popular 🇮🇳',
+      hostName: 'Rohan Verma',
+      hostAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
+      hostFlag: '🇮🇳',
+      listenerCount: 32,
+      tags: ['#Help me translate', '#Hindi-English', '#Speaking Practice'],
+      pinnedMessage: 'Practice speaking English and Hindi freely without fear of making mistakes!',
+      speakers: [
+        { id: 's14', name: 'Rohan Verma', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isHost: true, isSpeaking: true, level: 'Lv.11' },
+        { id: 's15', name: 'Sarah B.', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, level: 'Lv.14' }
       ]
     }
   ]);
@@ -149,37 +180,66 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     setTimeout(() => setToastMessage(''), 2500);
   };
 
-  // Join a room
+  // Join a room (matching screenshot 4 inside room view)
   const handleJoinRoom = (room: RoomItem) => {
     setActiveRoom(room);
     setMySeat(null);
     setIsMicOn(false);
     setIsHandRaised(false);
+    setIsFollowing(false);
+
+    // Initial messages matching screenshot 4
     setChatMessages([
       {
-        id: 'n1',
-        sender: 'System Notice',
+        id: 'pin1',
+        sender: room.hostName,
+        flag: room.hostFlag,
+        level: 10,
+        text: room.pinnedMessage || 'If you speak English, you can come to stage and speak.',
+        time: 'Pinned',
+        isPinned: true
+      },
+      {
+        id: 'notice1',
+        sender: 'Notice',
         flag: '📢',
         level: 1,
-        text: `Welcome to "${room.title}"! This is a free speaking practice room. Please communicate politely, encourage each other, and have fun building confidence!`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        text: 'HelloTalk is a language learning app. Please communicate using the chosen Voiceroom language. Avoid offensive content related to violence, abuse, politics, discrimination, drugs, guns, religion, etc. Thank you for maintaining a safe and inclusive learning environment.',
+        time: 'System',
         isNotice: true
       },
       {
         id: 'm1',
-        sender: room.hostName,
-        flag: room.hostFlag,
-        level: 14,
-        text: 'Hello everyone! Welcome to the room. Feel free to raise your hand to speak on stage! 👋',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        sender: 'Mr.Rage...',
+        flag: '🇺🇸',
+        level: 19,
+        text: 'Move to Jersey bro',
+        time: 'now'
       },
       {
         id: 'm2',
-        sender: 'Märcö',
-        flag: '🇮🇳',
-        level: 8,
-        text: 'Hey guys! Glad to join today’s practice.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        sender: 'Mr.Rage...',
+        flag: '🇺🇸',
+        level: 19,
+        text: 'Elizabeth to be exact lmao',
+        time: 'now'
+      },
+      {
+        id: 'm3',
+        sender: 'Mr.Rage...',
+        flag: '🇺🇸',
+        level: 19,
+        text: "Bro it's Eric",
+        time: 'now'
+      },
+      {
+        id: 'm4',
+        sender: 'Cephas ...',
+        flag: '🇺🇸',
+        level: 20,
+        badge: 'Bestie',
+        text: 'Bolsonaro',
+        time: 'now'
       }
     ]);
 
@@ -192,6 +252,9 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach(track => track.stop());
       micStreamRef.current = null;
+    }
+    if (speechRecognitionRef.current) {
+      try { speechRecognitionRef.current.stop(); } catch {}
     }
     setActiveRoom(null);
     setMySeat(null);
@@ -209,13 +272,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       id: `custom-room-${Date.now()}`,
       title: newRoomTitle.trim(),
       category: newRoomCategory,
-      badge: 'LIVE',
+      badge: 'EN',
       hourlyRank: 'Created by You',
       hostName: userName,
       hostAvatar: userPhoto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       hostFlag: '🇮🇳',
       listenerCount: 1,
       tags: [newRoomTag, '#Student Room', '#Free Practice'],
+      pinnedMessage: `Welcome to ${newRoomTitle}! Speak freely and have fun practicing.`,
       speakers: [
         {
           id: 'me',
@@ -225,7 +289,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           isHost: true,
           isSpeaking: false,
           isMuted: false,
-          level: 'Lv.1'
+          level: 'Lv.10'
         }
       ]
     };
@@ -235,13 +299,13 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     setNewRoomTitle('');
     handleJoinRoom(newRoom);
     setMySeat(0); // Take host seat
-    showToast('Voice room created! Share with your friends to join.');
+    showToast('Voice room created! You can now invite friends to speak together.');
   };
 
   // Toggle Microphone when on stage
   const handleToggleMic = async () => {
     if (mySeat === null) {
-      showToast('Take a seat on stage first to speak!');
+      showToast('Take an open seat on stage first to speak!');
       return;
     }
 
@@ -257,14 +321,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micStreamRef.current = stream;
         setIsMicOn(true);
-        showToast('Microphone unmuted 🎙️ Speak naturally!');
+        showToast('Microphone unmuted 🎙️ You are live on stage!');
       } catch {
-        showToast('Could not access microphone. Please check browser permission.');
+        showToast('Microphone permission needed to speak on stage.');
       }
     }
   };
 
-  // Raise hand or take seat
+  // Click on open seat (Seat 5, 6, 7, 8)
   const handleTakeSeat = (seatIdx: number) => {
     if (mySeat === seatIdx) {
       // Step down to audience
@@ -274,13 +338,13 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         micStreamRef.current.getTracks().forEach(track => track.stop());
         micStreamRef.current = null;
       }
-      showToast('Moved back to audience');
+      showToast('Moved down to audience');
       return;
     }
 
     setMySeat(seatIdx);
     setIsHandRaised(false);
-    showToast(`You are now on Stage (Seat ${seatIdx + 1})! Tap mic to speak.`);
+    showToast(`You took Seat ${seatIdx + 1}! Tap the microphone to talk with friends.`);
   };
 
   const handleRaiseHand = () => {
@@ -289,7 +353,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       return;
     }
     setIsHandRaised(!isHandRaised);
-    showToast(isHandRaised ? 'Hand lowered' : 'Hand raised! ✋ Host will invite you to stage.');
+    showToast(isHandRaised ? 'Hand lowered' : 'Hand raised! ✋ Host or speaker can invite you.');
   };
 
   // Send message in room chat
@@ -301,26 +365,26 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       id: `chat-${Date.now()}`,
       sender: userName,
       flag: '🇮🇳',
-      level: 1,
+      level: 12,
       text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: 'now'
     };
 
     setChatMessages(prev => [...prev, newMsg]);
     setChatInput('');
   };
 
-  // Send Floating reaction emoji
+  // Floating reaction emojis (clap, heart, fire, sparkles)
   const handleSendReaction = (emoji: string) => {
     const newEmoji = {
       id: Date.now() + Math.random(),
       emoji,
-      left: 20 + Math.random() * 60
+      left: 15 + Math.random() * 70
     };
     setFloatingEmojis(prev => [...prev, newEmoji]);
     setTimeout(() => {
       setFloatingEmojis(prev => prev.filter(e => e.id !== newEmoji.id));
-    }, 2000);
+    }, 2200);
   };
 
   // Scroll chat to bottom
@@ -331,21 +395,28 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const copyShareLink = () => {
     const link = `${window.location.origin}${window.location.pathname}?voiceroom=${activeRoom?.id || 'room-1'}`;
     navigator.clipboard?.writeText(link).then(() => {
-      showToast('Invite link copied! Send to friends on WhatsApp or Telegram.');
+      showToast('Invite link copied! Send to friends on WhatsApp or Discord.');
     }).catch(() => {
       showToast(`Room code: ${activeRoom?.id || 'VR-108'}`);
     });
   };
 
   // =========================================================================
-  // VIEW 1: INSIDE ACTIVE VOICE ROOM (MATCHING SCREENSHOT 2)
+  // VIEW 1: INSIDE ACTIVE VOICE ROOM (MATCHING SCREENSHOT 4)
   // =========================================================================
   if (activeRoom) {
-    const emptySeats = [4, 5, 6, 7];
+    const audienceMembers = [
+      { name: 'Märcö', flag: '🇮🇳', photo: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80' },
+      { name: 'Fiona', flag: '🇨🇳', photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80' },
+      { name: 'Aline Alv...', flag: '🇧🇷', photo: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&auto=format&fit=crop&q=80' },
+      { name: '竹子leon', flag: '🇨🇳', photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80' },
+      { name: 'Lee', flag: '🇨🇳', photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80' },
+      { name: 'Mik', flag: '🇨🇳', photo: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=100&auto=format&fit=crop&q=80' }
+    ];
 
     return (
       <div className="active-voiceroom-wrapper">
-        {/* Floating animated reaction emojis */}
+        {/* Floating animated reactions */}
         <div className="floating-reactions-container">
           {floatingEmojis.map(item => (
             <span
@@ -358,27 +429,44 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           ))}
         </div>
 
-        {/* Room Header */}
-        <div className="vr-header">
-          <div className="vr-title-group">
-            <span className="vr-badge">{activeRoom.badge || 'EN'}</span>
-            <div>
-              <h2 className="vr-title">{activeRoom.title}</h2>
-              <span className="vr-sub-tag">Level: High Practice · {activeRoom.tags[0]}</span>
-            </div>
-          </div>
-          <div className="vr-header-actions">
+        {/* Top Header Matching Screenshot 4 */}
+        <div className="ht-room-header">
+          <div className="ht-header-left">
+            <h2 className="ht-room-title">{activeRoom.title.split('·')[0].trim()}</h2>
             <button
               type="button"
-              className="vr-share-btn"
-              onClick={copyShareLink}
-              title="Share Room with friends"
+              className={`ht-follow-btn ${isFollowing ? 'following' : ''}`}
+              onClick={() => {
+                setIsFollowing(!isFollowing);
+                showToast(isFollowing ? 'Unfollowed room' : 'Following room ⭐');
+              }}
             >
-              <Share2 size={16} /> Share
+              {isFollowing ? 'Following' : 'Follow'}
+            </button>
+            <span className="ht-pill-tag ht-tag-en">{activeRoom.badge || 'EN'}</span>
+            <span className="ht-pill-tag ht-tag-level">🏠 Lv.10</span>
+          </div>
+
+          <div className="ht-header-right">
+            <button
+              type="button"
+              className="ht-icon-btn"
+              onClick={copyShareLink}
+              title="Share Room"
+            >
+              <Share2 size={18} />
             </button>
             <button
               type="button"
-              className="vr-leave-btn"
+              className="ht-icon-btn"
+              onClick={() => showToast('Room options: Notifications ON, Audio HD, Auto-translate')}
+              title="More Options"
+            >
+              <MoreHorizontal size={20} />
+            </button>
+            <button
+              type="button"
+              className="ht-leave-btn"
               onClick={handleLeaveRoom}
               title="Leave Room"
             >
@@ -387,114 +475,132 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           </div>
         </div>
 
-        {/* Stage Grid (Host & Speaker Seats) */}
-        <div className="vr-stage-section">
-          <div className="vr-stage-grid">
-            {/* Active Speakers on Stage */}
-            {activeRoom.speakers.map((spk, idx) => (
-              <div key={spk.id} className="vr-speaker-seat">
-                <div className={`vr-avatar-wrap ${spk.isSpeaking ? 'speaking-ripple' : ''}`}>
-                  <img src={spk.avatar} alt={spk.name} className="vr-avatar-img" />
-                  <span className="vr-flag-badge">{spk.flag}</span>
-                  {spk.isSpeaking && (
-                    <span className="vr-audio-icon">
-                      <AudioLines size={12} />
-                    </span>
-                  )}
-                  {spk.isMuted && (
-                    <span className="vr-muted-badge">
-                      <MicOff size={10} />
-                    </span>
-                  )}
+        {/* 8-Seat Stage Section Matching Screenshot 4 */}
+        <div className="ht-stage-container">
+          {/* Row 1: Active Speakers (Seats 1-4) */}
+          <div className="ht-stage-row">
+            {activeRoom.speakers.slice(0, 4).map((spk, idx) => {
+              const isMe = mySeat === idx;
+              return (
+                <div key={spk.id} className="ht-speaker-seat">
+                  <div className={`ht-avatar-circle ${spk.isSpeaking ? 'is-speaking-ring' : ''}`}>
+                    <img src={spk.avatar} alt={spk.name} className="ht-avatar-img" />
+                    <span className="ht-country-flag">{spk.flag}</span>
+                    {spk.isMuted && (
+                      <span className="ht-mute-badge">
+                        <MicOff size={11} />
+                      </span>
+                    )}
+                    {spk.isSpeaking && (
+                      <span className="ht-speaking-badge">
+                        <AudioLines size={12} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="ht-speaker-name-row">
+                    {spk.isHost && <span className="ht-host-icon">🏠</span>}
+                    <span className="ht-speaker-name">{isMe ? `${userName} (You)` : spk.name}</span>
+                  </div>
                 </div>
-                <div className="vr-speaker-info">
-                  <span className="vr-speaker-name">
-                    {spk.isHost && <span className="vr-host-pill">★ Host</span>}
-                    {spk.name}
-                  </span>
-                  <span className="vr-speaker-lvl">{spk.level || `Lv.${idx + 5}`}</span>
-                </div>
-              </div>
-            ))}
-
-            {/* My Seat if on stage */}
-            {mySeat !== null && (
-              <div className="vr-speaker-seat">
-                <div className={`vr-avatar-wrap ${isMicOn ? 'speaking-ripple' : ''} my-seat-avatar`}>
-                  {userPhoto ? (
-                    <img src={userPhoto} alt={userName} className="vr-avatar-img" />
-                  ) : (
-                    <div className="vr-avatar-initials">{userName.slice(0, 2).toUpperCase()}</div>
-                  )}
-                  <span className="vr-flag-badge">🇮🇳</span>
-                  {isMicOn ? (
-                    <span className="vr-audio-icon"><Mic size={12} /></span>
-                  ) : (
-                    <span className="vr-muted-badge"><MicOff size={10} /></span>
-                  )}
-                </div>
-                <div className="vr-speaker-info">
-                  <span className="vr-speaker-name">{userName} (You)</span>
-                  <span className="vr-speaker-lvl">Speaker</span>
-                </div>
-              </div>
-            )}
-
-            {/* Empty Chairs: Take a seat */}
-            {emptySeats.slice(mySeat !== null ? 1 : 0).map((seatNum) => (
-              <button
-                key={seatNum}
-                type="button"
-                className="vr-empty-seat"
-                onClick={() => handleTakeSeat(seatNum)}
-                title={`Click to take Seat ${seatNum + 1} and speak`}
-              >
-                <div className="vr-empty-chair-circle">
-                  <Hand size={18} />
-                </div>
-                <span className="vr-seat-num">{seatNum + 1}</span>
-              </button>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Active Listeners Row */}
-          <div className="vr-listeners-row">
-            <span className="vr-listeners-label">Audience ({activeRoom.listenerCount}):</span>
-            <div className="vr-listeners-avatars">
-              <span className="vr-listener-chip">🇮🇳 Arjun</span>
-              <span className="vr-listener-chip">🇺🇸 Cephas</span>
-              <span className="vr-listener-chip">🇯🇵 Fiona</span>
-              <span className="vr-listener-chip">🇧🇷 Aline</span>
-              <span className="vr-listener-chip">🇩🇪 Leon</span>
-              <span className="vr-listener-more">+ {activeRoom.listenerCount - 5} Others</span>
+          {/* Row 2: Joinable Stage Seats (Seats 5-8) */}
+          <div className="ht-stage-row ht-empty-seats-row">
+            {[4, 5, 6, 7].map((seatIdx) => {
+              const isMySeat = mySeat === seatIdx;
+              return (
+                <div key={seatIdx} className="ht-speaker-seat">
+                  {isMySeat ? (
+                    <div
+                      className={`ht-avatar-circle my-seat-active ${isMicOn ? 'is-speaking-ring' : ''}`}
+                      onClick={() => handleTakeSeat(seatIdx)}
+                      title="Click to step down to audience"
+                    >
+                      {userPhoto ? (
+                        <img src={userPhoto} alt={userName} className="ht-avatar-img" />
+                      ) : (
+                        <div className="ht-avatar-initials">{userName.slice(0, 2).toUpperCase()}</div>
+                      )}
+                      <span className="ht-country-flag">🇮🇳</span>
+                      {isMicOn ? (
+                        <span className="ht-speaking-badge"><Mic size={11} /></span>
+                      ) : (
+                        <span className="ht-mute-badge"><MicOff size={11} /></span>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="ht-empty-seat-button"
+                      onClick={() => handleTakeSeat(seatIdx)}
+                      title={`Click to take Seat ${seatIdx + 1} and speak with everyone`}
+                    >
+                      <div className="ht-empty-seat-icon">
+                        <Hand size={18} />
+                      </div>
+                    </button>
+                  )}
+                  <span className="ht-seat-number">
+                    {isMySeat ? 'You' : seatIdx + 1}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Audience Row Matching Screenshot 4 */}
+          <div className="ht-audience-row">
+            {audienceMembers.map((aud, i) => (
+              <div key={i} className="ht-audience-item">
+                <div className="ht-audience-avatar-wrap">
+                  <img src={aud.photo} alt={aud.name} className="ht-audience-img" />
+                  <span className="ht-audience-flag">{aud.flag}</span>
+                </div>
+                <span className="ht-audience-name">{aud.name}</span>
+              </div>
+            ))}
+            <div className="ht-audience-more-pill">
+              <span>{activeRoom.listenerCount - 6 > 0 ? activeRoom.listenerCount - 6 : 11}</span>
+              <small>Others in...</small>
             </div>
           </div>
         </div>
 
-        {/* Live Room Chat Messages */}
-        <div className="vr-chat-section" role="log" aria-live="polite">
+        {/* Live Chat Area Matching Screenshot 4 */}
+        <div className="ht-chat-stream-section" role="log" aria-live="polite">
           {chatMessages.map(msg => (
-            <div
-              key={msg.id}
-              className={`vr-chat-bubble-wrap ${msg.isNotice ? 'notice-bubble' : ''}`}
-            >
-              {msg.isNotice ? (
-                <div className="vr-notice-card">
-                  <div className="vr-notice-head">
-                    <Shield size={14} />
-                    <span>Community Guidelines</span>
+            <div key={msg.id} className="ht-chat-message-item">
+              {msg.isPinned ? (
+                <div className="ht-pinned-card">
+                  <span className="ht-pin-icon">📌</span>
+                  <span className="ht-pinned-author">{msg.sender}:</span>
+                  <p className="ht-pinned-text">{msg.text}</p>
+                </div>
+              ) : msg.isNotice ? (
+                <div className="ht-notice-box">
+                  <div className="ht-notice-title-row">
+                    <span className="ht-notice-badge">Notice</span>
+                    <span className="ht-notice-horn">📢</span>
                   </div>
-                  <p>{msg.text}</p>
+                  <p className="ht-notice-content">{msg.text}</p>
                 </div>
               ) : (
-                <div className="vr-user-msg">
-                  <div className="vr-msg-meta">
-                    <span className="vr-user-flag">{msg.flag}</span>
-                    <span className="vr-user-lvl">Lv.{msg.level}</span>
-                    <span className="vr-user-name">{msg.sender}</span>
-                    <span className="vr-msg-time">{msg.time}</span>
-                  </div>
-                  <p className="vr-msg-content">{msg.text}</p>
+                <div className="ht-user-comment-row">
+                  <span className="ht-user-flag">{msg.flag}</span>
+                  <span className="ht-user-level-badge">💎 {msg.level}</span>
+                  {msg.badge && <span className="ht-user-bestie-badge">{msg.badge}</span>}
+                  <span className="ht-user-sender">{msg.sender}:</span>
+                  <span className="ht-comment-text">{msg.text}</span>
+                  <button
+                    type="button"
+                    className="ht-translate-mini-btn"
+                    onClick={() => showToast(`Translated: "${msg.text}"`)}
+                    title="Translate comment"
+                  >
+                    文
+                  </button>
                 </div>
               )}
             </div>
@@ -502,46 +608,69 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           <div ref={chatEndRef} />
         </div>
 
-        {/* Bottom Action Bar */}
-        <div className="vr-bottom-bar">
-          {/* Quick chips */}
-          <div className="vr-quick-chips">
-            <button
-              type="button"
-              className="vr-chip"
-              onClick={() => handleSendMessage('Hey, everyone!')}
-            >
-              Hey, everyone! 👋
-            </button>
-            <button
-              type="button"
-              className="vr-chip"
-              onClick={() => handleSendMessage('What is the discussion topic?')}
-            >
-              What's the topic?
-            </button>
-            <button
-              type="button"
-              className="vr-chip"
-              onClick={() => handleSendMessage('I am new here, excited to practice!')}
-            >
-              I'm new here 👋
-            </button>
-            <button
-              type="button"
-              className="vr-chip"
-              onClick={() => handleSendMessage('Can I take the next turn to speak?')}
-            >
-              Can I speak next? 🎙️
-            </button>
-          </div>
+        {/* Floating Mascot Widget on right */}
+        <div className="ht-floating-mascot">
+          <button
+            type="button"
+            className="ht-mascot-btn"
+            onClick={() => showToast('TECH AI Live Room: Practice freely & make friends!')}
+            title="Live speaking buddy"
+          >
+            <span className="mascot-badge">Live</span>
+            <span className="mascot-emoji">🐾</span>
+          </button>
+        </div>
 
-          {/* Interactive controls */}
-          <div className="vr-input-row">
+        {/* Bottom Bar: Quick Reply Chips + Comment Bar Matching Screenshot 4 */}
+        <div className="ht-bottom-controls-section">
+          {/* Quick Reply Chips Row */}
+          {showQuickChips && (
+            <div className="ht-quick-chips-row">
+              <button
+                type="button"
+                className="ht-quick-chip"
+                onClick={() => handleSendMessage('Hey, everyone!')}
+              >
+                Hey, everyone!
+              </button>
+              <button
+                type="button"
+                className="ht-quick-chip"
+                onClick={() => handleSendMessage("What's the topic?")}
+              >
+                What's the topic?
+              </button>
+              <button
+                type="button"
+                className="ht-quick-chip"
+                onClick={() => handleSendMessage("I'm new here.")}
+              >
+                I'm new here.
+              </button>
+              <button
+                type="button"
+                className="ht-quick-chip"
+                onClick={() => handleSendMessage('Can I take a turn on stage?')}
+              >
+                Can I speak next?
+              </button>
+              <button
+                type="button"
+                className="ht-close-chips-btn"
+                onClick={() => setShowQuickChips(false)}
+                title="Dismiss quick chips"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Comment & Interaction Bar */}
+          <div className="ht-action-bar-row">
             <input
               type="text"
-              className="vr-text-input"
-              placeholder="Comment in room…"
+              className="ht-comment-input"
+              placeholder="Comment…"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => {
@@ -552,40 +681,61 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
               }}
             />
 
-            {/* Stage Mic Button */}
+            {/* CC Live Captions Toggle */}
             <button
               type="button"
-              className={`vr-ctrl-btn vr-mic-btn ${isMicOn ? 'active-speaking' : ''} ${mySeat === null ? 'disabled' : ''}`}
-              onClick={handleToggleMic}
-              title={mySeat === null ? 'Take a seat to use mic' : isMicOn ? 'Mute Mic' : 'Unmute Mic'}
+              className={`ht-action-btn ${showCC ? 'active' : ''}`}
+              onClick={() => {
+                setShowCC(!showCC);
+                showToast(showCC ? 'Live captions OFF' : 'Live captions ON');
+              }}
+              title="Toggle Live Speech Subtitles (CC)"
             >
-              {isMicOn ? <Mic size={18} /> : <MicOff size={18} />}
-              <span>{isMicOn ? 'Speaking' : mySeat !== null ? 'Mic Off' : 'Mic'}</span>
+              CC
             </button>
 
-            {/* Raise Hand Button */}
+            {/* Mic / Seat Button */}
+            {mySeat !== null ? (
+              <button
+                type="button"
+                className={`ht-action-btn ht-mic-active ${isMicOn ? 'mic-speaking' : 'mic-muted'}`}
+                onClick={handleToggleMic}
+                title={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
+              >
+                {isMicOn ? <Mic size={18} /> : <MicOff size={18} />}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={`ht-action-btn ${isHandRaised ? 'hand-active' : ''}`}
+                onClick={handleRaiseHand}
+                title="Raise Hand to Speak"
+              >
+                <Hand size={18} />
+              </button>
+            )}
+
+            {/* Reaction / Gifts Button */}
             <button
               type="button"
-              className={`vr-ctrl-btn ${isHandRaised ? 'hand-active' : ''}`}
-              onClick={handleRaiseHand}
-              title="Raise hand to request stage"
+              className="ht-action-btn ht-gift-btn"
+              onClick={() => handleSendReaction('🎁')}
+              title="Send Gift / Reaction"
             >
-              <Hand size={18} />
-              <span>{isHandRaised ? 'Raised' : 'Raise'}</span>
+              🎁
             </button>
 
-            {/* Emoji Reactions */}
-            <div className="vr-reaction-bar">
-              <button type="button" onClick={() => handleSendReaction('👏')} title="Clap">👏</button>
-              <button type="button" onClick={() => handleSendReaction('❤️')} title="Love">❤️</button>
-              <button type="button" onClick={() => handleSendReaction('🔥')} title="Fire">🔥</button>
-              <button type="button" onClick={() => handleSendReaction('💡')} title="Idea">💡</button>
+            {/* Reactions quick row */}
+            <div className="ht-reactions-mini">
+              <button type="button" onClick={() => handleSendReaction('❤️')}>❤️</button>
+              <button type="button" onClick={() => handleSendReaction('👏')}>👏</button>
+              <button type="button" onClick={() => handleSendReaction('🔥')}>🔥</button>
             </div>
 
-            {/* Send Message */}
+            {/* Send Button */}
             <button
               type="button"
-              className="vr-send-btn"
+              className="ht-send-btn"
               onClick={() => handleSendMessage()}
               disabled={!chatInput.trim()}
             >
@@ -594,141 +744,134 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           </div>
         </div>
 
-        {/* Toast */}
-        {toastMessage && <div className="vr-toast-pill">{toastMessage}</div>}
+        {/* Toast Pill */}
+        {toastMessage && <div className="ht-toast-pill">{toastMessage}</div>}
       </div>
     );
   }
 
   // =========================================================================
-  // VIEW 2: VOICE ROOM LOBBY (MATCHING SCREENSHOT 1)
+  // VIEW 2: VOICE ROOM LOBBY (MATCHING SCREENSHOT 3)
   // =========================================================================
-  const filteredRooms = activeTab === 'All'
+  const filteredRooms = categoryTab === 'All'
     ? rooms
-    : rooms.filter(r => r.category === activeTab || r.tags.some(t => t.toLowerCase().includes(activeTab.toLowerCase())));
+    : rooms.filter(r => r.category === categoryTab || r.tags.some(t => t.toLowerCase().includes(categoryTab.toLowerCase())));
 
   return (
     <div className="voiceroom-lobby-container">
-      {/* Lobby Header */}
-      <div className="vr-lobby-header">
-        <div className="vr-lobby-brand">
-          <div className="vr-brand-icon">
-            <Radio size={24} />
-          </div>
-          <div>
-            <h1>Student Voice Rooms</h1>
-            <p>Practice speaking live with friends, build confidence, and speak freely — 100% Free.</p>
-          </div>
+      {/* Top Bar Matching Screenshot 3: VIP pill on left, Voice/Live/Learn in center, Mic button on right */}
+      <div className="ht-lobby-topbar">
+        <div className="ht-vip-badge-pill" title="Free VIP Speaking Access for Students">
+          <span className="ht-vip-sub">Upgrade</span>
+          <span className="ht-vip-bold">VIP</span>
         </div>
 
-        <div className="vr-lobby-actions">
-          <button
-            type="button"
-            className="vr-create-room-btn"
-            onClick={() => setCreateModalOpen(true)}
-          >
-            <Plus size={18} /> Create Voice Room
-          </button>
+        <div className="ht-top-tabs">
+          {(['Voice', 'Live', 'Learn'] as const).map(tab => (
+            <button
+              key={tab}
+              type="button"
+              className={`ht-top-tab ${topTab === tab ? 'active' : ''}`}
+              onClick={() => setTopTab(tab)}
+            >
+              {tab}
+              {topTab === tab && <span className="ht-tab-active-indicator" />}
+            </button>
+          ))}
         </div>
+
+        <button
+          type="button"
+          className="ht-create-mic-btn"
+          onClick={() => setCreateModalOpen(true)}
+          title="Create a Free Voice Room"
+        >
+          <Mic size={20} />
+        </button>
       </div>
 
-      {/* Hall of Fame Banner (Matching Screenshot 1) */}
-      <div className="vr-hall-of-fame-card">
-        <div className="hof-content">
-          <div className="hof-tag">
-            <Award size={15} />
-            <span>DAILY LEADERS</span>
-          </div>
-          <h2>Hall of Fame · Top English Speakers</h2>
-          <p>Join live rooms to earn confidence badges and top the daily practice leaderboard.</p>
-          <div className="hof-speakers-row">
-            <span className="hof-avatar">🥇 MH SA (42 min)</span>
-            <span className="hof-avatar">🥈 Anthony (35 min)</span>
-            <span className="hof-avatar">🥉 Rohan (28 min)</span>
-          </div>
-        </div>
-        <div className="hof-trophy-graphic">
-          <Trophy size={64} className="trophy-svg" />
-          <span className="hof-glow" />
-        </div>
-      </div>
-
-      {/* Category Tabs (All, English, Hindi, Interaction, Exam Prep) */}
-      <div className="vr-category-tabs">
-        {(['All', 'English', 'Hindi', 'Interaction', 'Exam Prep'] as const).map(tab => (
+      {/* Category Pills Row Matching Screenshot 3 */}
+      <div className="ht-category-pills-row">
+        {['All', 'English', 'Hindi', 'Interaction', 'Music', 'Gaming'].map(cat => (
           <button
-            key={tab}
+            key={cat}
             type="button"
-            className={`vr-category-tab ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
+            className={`ht-category-pill ${categoryTab === cat ? 'active' : ''}`}
+            onClick={() => setCategoryTab(cat)}
           >
-            {tab}
+            {cat}
           </button>
         ))}
       </div>
 
-      {/* Voice Rooms Grid (Matching Screenshot 1 Cards) */}
-      <div className="vr-rooms-grid">
+      {/* Hall of Fame Banner Matching Screenshot 3 */}
+      <div className="ht-hall-of-fame-banner">
+        <div className="ht-hof-text-side">
+          <h2 className="ht-hof-title">Hall of Fame</h2>
+          <p className="ht-hof-subtitle">Practice speaking with friends to top today's leaderboard.</p>
+          <div className="ht-hof-dots">
+            <span className="dot active" />
+            <span className="dot" />
+            <span className="dot" />
+          </div>
+        </div>
+        <div className="ht-hof-graphic-side">
+          <Trophy size={68} className="ht-trophy-icon" />
+          <div className="ht-trophy-glow" />
+        </div>
+      </div>
+
+      {/* Room Cards List Matching Screenshot 3 */}
+      <div className="ht-rooms-list">
         {filteredRooms.map(room => (
-          <div key={room.id} className="vr-room-card" onClick={() => handleJoinRoom(room)}>
-            {/* Card Top Metadata */}
-            <div className="room-card-head">
-              <div className="room-card-tags">
-                <span className="room-badge">{room.badge || 'EN'}</span>
-                {room.tags.slice(0, 2).map((tg, i) => (
-                  <span key={i} className="room-topic-tag">{tg}</span>
-                ))}
-              </div>
+          <div key={room.id} className="ht-room-card" onClick={() => handleJoinRoom(room)}>
+            {/* Top Badges Row */}
+            <div className="ht-card-tags-row">
+              <span className="ht-card-badge-black">{room.badge || 'EN'}</span>
+              {room.tags.slice(0, 1).map((tg, i) => (
+                <span key={i} className="ht-card-badge-purple">{tg}</span>
+              ))}
               {room.hourlyRank && (
-                <span className="room-rank-pill">{room.hourlyRank}</span>
+                <span className="ht-card-badge-rank">{room.hourlyRank}</span>
               )}
             </div>
 
-            {/* Room Title with Audio Wave */}
-            <div className="room-card-title-row">
-              <span className="room-audio-bars">
-                <span className="bar" />
-                <span className="bar" />
-                <span className="bar" />
+            {/* Title with Equalizer Wave Icon */}
+            <div className="ht-card-title-row">
+              <span className="ht-card-audio-bars">
+                <span className="b1" />
+                <span className="b2" />
+                <span className="b3" />
               </span>
-              <h3>{room.title}</h3>
+              <h3 className="ht-card-title">{room.title}</h3>
             </div>
 
-            {/* Host info and Participants */}
-            <div className="room-card-footer">
-              <div className="room-host-block">
-                <div className="room-host-avatar-wrap">
-                  <img src={room.hostAvatar} alt={room.hostName} className="room-host-img" />
-                  <span className="room-host-flag">{room.hostFlag}</span>
+            {/* Bottom Row: Host info on left, Listener Overlap Avatars on right */}
+            <div className="ht-card-bottom-row">
+              <div className="ht-host-info-block">
+                <div className="ht-host-avatar-wrap">
+                  <img src={room.hostAvatar} alt={room.hostName} className="ht-host-img" />
+                  <span className="ht-host-country-flag">{room.hostFlag}</span>
                 </div>
-                <div className="room-host-names">
-                  <span className="host-creator-badge">★ Creator</span>
-                  <span className="host-name">{room.hostName}</span>
+                <div className="ht-host-text">
+                  <span className="ht-creator-tag">★ Creator</span>
+                  <span className="ht-host-name-label">{room.hostName}</span>
                 </div>
               </div>
 
-              {/* Listener Avatars & Count */}
-              <div className="room-listeners-stack">
-                <div className="listeners-avatar-overlap">
-                  {room.speakers.slice(0, 3).map((sp, i) => (
-                    <img key={i} src={sp.avatar} alt={sp.name} className="overlap-img" />
+              {/* Overlapping listener avatars + count pill */}
+              <div className="ht-listeners-overlap-block">
+                <div className="ht-overlap-avatars">
+                  {room.speakers.slice(0, 4).map((spk, idx) => (
+                    <div key={idx} className="ht-overlap-circle">
+                      <img src={spk.avatar} alt={spk.name} className="ht-overlap-img" />
+                      <span className="ht-overlap-flag">{spk.flag}</span>
+                    </div>
                   ))}
                 </div>
-                <span className="room-count-pill">{room.listenerCount} in room</span>
+                <span className="ht-listeners-count-pill">{room.listenerCount}</span>
               </div>
             </div>
-
-            {/* Join Button */}
-            <button
-              type="button"
-              className="room-join-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleJoinRoom(room);
-              }}
-            >
-              <Volume2 size={15} /> Join & Practice
-            </button>
           </div>
         ))}
       </div>
@@ -756,11 +899,10 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                 <span>Room Title</span>
                 <input
                   type="text"
-                  placeholder="e.g. Daily English Conversation with Friends"
+                  placeholder="e.g. Daily English Speaking Practice with Friends"
                   value={newRoomTitle}
                   onChange={e => setNewRoomTitle(e.target.value)}
                   required
-                  autoFocus
                 />
               </label>
 
@@ -771,21 +913,25 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                     value={newRoomCategory}
                     onChange={e => setNewRoomCategory(e.target.value)}
                   >
-                    <option value="English">English Learning</option>
-                    <option value="Interaction">Casual Chat & Friends</option>
-                    <option value="Exam Prep">College GD & Interview</option>
-                    <option value="Hindi">Hindi / Hinglish Exchange</option>
+                    <option value="English">English</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="Interaction">Interaction</option>
+                    <option value="Exam Prep">Exam Prep</option>
                   </select>
                 </label>
 
                 <label className="vr-field">
                   <span>Topic Tag</span>
-                  <input
-                    type="text"
-                    placeholder="#English Learning"
+                  <select
                     value={newRoomTag}
                     onChange={e => setNewRoomTag(e.target.value)}
-                  />
+                  >
+                    <option value="#English Learning">#English Learning</option>
+                    <option value="#Daily Speaking">#Daily Speaking</option>
+                    <option value="#Confidence">#Confidence</option>
+                    <option value="#Interview Prep">#Interview Prep</option>
+                    <option value="#Help me translate">#Help me translate</option>
+                  </select>
                 </label>
               </div>
 
@@ -797,12 +943,8 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="vr-btn-create"
-                  disabled={!newRoomTitle.trim()}
-                >
-                  <Sparkles size={16} /> Launch Voice Room
+                <button type="submit" className="vr-btn-create">
+                  <Plus size={16} /> Create Room & Start Live
                 </button>
               </div>
             </form>
@@ -810,8 +952,8 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         </div>
       )}
 
-      {/* Toast */}
-      {toastMessage && <div className="vr-toast-pill">{toastMessage}</div>}
+      {/* Toast Notification */}
+      {toastMessage && <div className="ht-toast-pill">{toastMessage}</div>}
     </div>
   );
 }

@@ -962,6 +962,9 @@ function AppContent() {
           <PageHeading eyebrow="TECH AI | SMART WAY" title="English Practice & AI Voice Studio" subtitle="Practise conversational English with your AI coach. Get real-time speech feedback, speaking level adaptation, and grammar tips."/>
           <VoicePractice onProgress={addProgress} />
         </section>}
+        {module==='voiceroom'&&<section className="page-section">
+          <VoiceRoom userName={currentUser.name} userPhoto={profile.profilePhoto} onProgress={addProgress} />
+        </section>}
         {module==='docs'&&<section className="page-section">
           <PageHeading eyebrow={t('CAMERA · UPLOAD · PREVIEW')} title={t('Smart Doc')} subtitle={t('Capture a document or upload the original. Compare and download a processed copy while keeping the source intact.')}/>
           <div className="doc-workspace">
