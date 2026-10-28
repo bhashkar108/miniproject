@@ -19,6 +19,7 @@
     "drizzle-orm": "catalog:",
     "express": "^5.2.1",
     "jose": "^6.2.12",
+    "livekit-server-sdk": "^2.19.2",
     "mammoth": "^1.13.0",
     "multer": "^2.4.0",
     "pino": "^9.14.0",

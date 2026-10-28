@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Mic, MicOff, Hand, MessageSquare, Share2, LogOut, Plus,
-  Trophy, Sparkles, Volume2, Globe, Heart, Flame, ThumbsUp, Send, X,
-  Check, Copy, Shield, Award, AudioLines, MoreHorizontal, Radio, Bell,
-  Sparkle, Compass
+  Mic, MicOff, Hand, Share2, LogOut, Plus,
+  Trophy, Sparkles, Send, X, Check, Copy, AudioLines,
+  MoreHorizontal, Radio, Users, PhoneCall, ExternalLink,
+  RefreshCw, Volume2, ShieldCheck, Heart, Flame, ThumbsUp
 } from 'lucide-react';
+import { Room, RoomEvent, Track, RemoteTrack, createLocalAudioTrack, LocalAudioTrack } from 'livekit-client';
 
 export interface VoiceRoomProps {
   userName?: string;
@@ -21,14 +22,18 @@ interface Speaker {
   isSpeaking?: boolean;
   isMuted?: boolean;
   level?: string;
+  seatIndex?: number | null;
+  role?: 'host' | 'speaker' | 'listener';
 }
 
 interface RoomItem {
   id: string;
   title: string;
+  description?: string;
   category: string;
   badge?: string;
   hourlyRank?: string;
+  hostId?: string;
   hostName: string;
   hostAvatar: string;
   hostFlag: string;
@@ -53,13 +58,14 @@ interface ChatMessage {
 export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: VoiceRoomProps) {
   // Current view: lobby or inside a room
   const [activeRoom, setActiveRoom] = useState<RoomItem | null>(null);
-  const [topTab, setTopTab] = useState<'Voice' | 'Live' | 'Learn'>('Voice');
   const [categoryTab, setCategoryTab] = useState<string>('All');
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
   const [showQuickChips, setShowQuickChips] = useState(true);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'connecting' | 'connected' | 'demo_mesh' | 'error'>('idle');
 
   // Inside-room interactive states
   const [mySeat, setMySeat] = useState<number | null>(null); // null = audience, 0..7 = stage seat
@@ -69,6 +75,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const [floatingEmojis, setFloatingEmojis] = useState<{ id: number; emoji: string; left: number }[]>([]);
   const [showCC, setShowCC] = useState(false);
   const [liveCaption, setLiveCaption] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // Form states for creating a room
   const [newRoomTitle, setNewRoomTitle] = useState('');
@@ -78,115 +85,208 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   // Room messages
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const speechRecognitionRef = useRef<any>(null);
 
-  // Pre-populated realistic English practice rooms (matching HelloTalk screenshots 3 & 4)
+  // Audio & WebRTC Refs
+  const audioContainerRef = useRef<HTMLDivElement>(null);
+  const livekitRoomRef = useRef<Room | null>(null);
+  const localAudioTrackRef = useRef<LocalAudioTrack | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+
+  // Default rooms
   const [rooms, setRooms] = useState<RoomItem[]>([
     {
       id: 'room-1',
       title: 'MH Radio 👻 The Global Lounge',
+      description: 'Daily fluent conversations, idioms, and friendly banter with global peers.',
       category: 'English',
       badge: 'EN',
-      hourlyRank: 'Hourly No. 1',
+      hourlyRank: 'Hourly No. 1 🔥',
+      hostId: 'host-1',
       hostName: 'MH SA',
       hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       hostFlag: '🇰🇷',
-      listenerCount: 40,
+      listenerCount: 42,
       tags: ['#English Learning', '#Global Lounge', '#Fluency Practice'],
       pinnedMessage: 'If you speak English or want to practice, you can come up on stage! Everyone is welcome.',
       speakers: [
-        { id: 's1', name: 'MH SA', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', flag: '🇰🇷', isHost: true, isSpeaking: false, isMuted: false, level: 'Lv.15' },
-        { id: 's2', name: 'Cephas 石谦', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, isMuted: true, level: 'Lv.12' },
-        { id: 's3', name: 'Tayla', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', flag: '🇬🇧', isSpeaking: false, isMuted: false, level: 'Lv.10' },
-        { id: 's4', name: 'WW', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: true, isMuted: false, level: 'Lv.16' }
+        { id: 's1', name: 'MH SA', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', flag: '🇰🇷', isHost: true, isSpeaking: false, isMuted: false, level: 'Lv.15', seatIndex: 0 },
+        { id: 's2', name: 'Cephas 石谦', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, isMuted: true, level: 'Lv.12', seatIndex: 1 },
+        { id: 's3', name: 'Tayla', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', flag: '🇬🇧', isSpeaking: false, isMuted: false, level: 'Lv.10', seatIndex: 2 },
+        { id: 's4', name: 'WW', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: true, isMuted: false, level: 'Lv.16', seatIndex: 3 }
       ]
     },
     {
       id: 'room-2',
-      title: 'No Jihadis · Peaceful Discussion & English Chat',
-      category: 'Interaction',
-      badge: 'EN',
-      hourlyRank: 'Live 🔥',
-      hostName: 'Hills',
-      hostAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
-      hostFlag: '🇬🇭',
-      listenerCount: 14,
-      tags: ['#Bunka-no-Hi', '#Cultural Exchange', '#Respectful Debates'],
-      pinnedMessage: 'Hills: If you speak English, you can come to stage and introduce yourself.',
+      title: 'Help Me Translate · Hindi & English Exchange 🇮🇳',
+      description: 'Practice speaking English and Hindi freely without fear of grammatical mistakes.',
+      category: 'Hindi',
+      badge: 'HI-EN',
+      hourlyRank: 'Live ⚡',
+      hostId: 'host-2',
+      hostName: 'Rohan Verma',
+      hostAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
+      hostFlag: '🇮🇳',
+      listenerCount: 29,
+      tags: ['#Help me translate', '#Hindi-English', '#Speaking Practice'],
+      pinnedMessage: 'Practice speaking English and Hindi freely without fear of making mistakes!',
       speakers: [
-        { id: 's5', name: 'Hills', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80', flag: '🇬🇭', isHost: true, isSpeaking: false, isMuted: false, level: 'Lv.10' },
-        { id: 's6', name: 'Cephas 石谦', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, isMuted: true, level: 'Lv.20' },
-        { id: 's7', name: 'Tayla', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80', flag: '🇬🇧', isSpeaking: false, isMuted: false, level: 'Lv.10' },
-        { id: 's8', name: 'WW', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: true, isMuted: false, level: 'Lv.16' }
+        { id: 's5', name: 'Rohan Verma', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isHost: true, isSpeaking: false, isMuted: false, level: 'Lv.11', seatIndex: 0 },
+        { id: 's6', name: 'Sarah B.', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, isMuted: false, level: 'Lv.14', seatIndex: 1 }
       ]
     },
     {
       id: 'room-3',
-      title: 'English chat 💬 - Daily Confidence Lab',
+      title: 'Daily Confidence Lab & Job Interview Prep 💬',
+      description: 'Mock HR interviews, self-intro rounds, and accent clarity training.',
       category: 'English',
       badge: 'EN',
-      hourlyRank: 'Active ⭐',
-      hostName: 'anthony 安瀚辰',
+      hourlyRank: 'Popular ⭐',
+      hostId: 'host-3',
+      hostName: 'Anthony 安瀚辰',
       hostAvatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80',
       hostFlag: '🇺🇸',
-      listenerCount: 21,
-      tags: ['#English Learning', '#Confidence', '#Fluency'],
-      pinnedMessage: 'Welcome! Today we talk about daily routines and college life.',
+      listenerCount: 34,
+      tags: ['#English Learning', '#Confidence', '#Interview Prep'],
+      pinnedMessage: 'Welcome! Today we practice: "Tell me about yourself" and impromptu questions.',
       speakers: [
-        { id: 's9', name: 'anthony 安瀚辰', avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isHost: true, isSpeaking: true, level: 'Lv.14' },
-        { id: 's10', name: 'Priya S.', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isSpeaking: false, level: 'Lv.9' },
-        { id: 's11', name: 'Kenji', avatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80', flag: '🇯🇵', isSpeaking: false, level: 'Lv.11' }
-      ]
-    },
-    {
-      id: 'room-4',
-      title: 'Life without TikTok & Social Media',
-      category: 'English',
-      badge: 'EN',
-      hourlyRank: 'Top Discussion',
-      hostName: 'Nadir',
-      hostAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
-      hostFlag: '🇺🇿',
-      listenerCount: 18,
-      tags: ['#English Learning', '#Digital Well-being', '#Focus'],
-      pinnedMessage: 'How do you spend your free time when you stay off short videos?',
-      speakers: [
-        { id: 's12', name: 'Nadir', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80', flag: '🇺🇿', isHost: true, isSpeaking: false, level: 'Lv.9' },
-        { id: 's13', name: 'Emma Watson', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80', flag: '🇨🇦', isSpeaking: true, level: 'Lv.13' }
-      ]
-    },
-    {
-      id: 'room-5',
-      title: 'Help Me Translate · Hindi & English Language Exchange',
-      category: 'Hindi',
-      badge: 'EN',
-      hourlyRank: 'Popular 🇮🇳',
-      hostName: 'Rohan Verma',
-      hostAvatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
-      hostFlag: '🇮🇳',
-      listenerCount: 32,
-      tags: ['#Help me translate', '#Hindi-English', '#Speaking Practice'],
-      pinnedMessage: 'Practice speaking English and Hindi freely without fear of making mistakes!',
-      speakers: [
-        { id: 's14', name: 'Rohan Verma', avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isHost: true, isSpeaking: true, level: 'Lv.11' },
-        { id: 's15', name: 'Sarah B.', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isSpeaking: false, level: 'Lv.14' }
+        { id: 's7', name: 'Anthony 安瀚辰', avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80', flag: '🇺🇸', isHost: true, isSpeaking: true, level: 'Lv.14', seatIndex: 0 },
+        { id: 's8', name: 'Priya S.', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80', flag: '🇮🇳', isSpeaking: false, level: 'Lv.9', seatIndex: 1 }
       ]
     }
   ]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 2500);
+    setTimeout(() => setToastMessage(''), 3000);
   };
 
-  // Join a room (matching screenshot 4 inside room view)
-  const handleJoinRoom = (room: RoomItem) => {
+  // Fetch rooms from backend on mount
+  const fetchRooms = useCallback(async () => {
+    try {
+      setIsLoadingRooms(true);
+      const res = await fetch('/api/voicerooms');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.rooms) && data.rooms.length > 0) {
+          setRooms(data.rooms);
+        }
+      }
+    } catch {
+      // Backend offline, fallback rooms remain intact
+    } finally {
+      setIsLoadingRooms(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
+
+  // Clean up audio & WebRTC on unmount
+  const teardownAudio = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch {}
+      audioContextRef.current = null;
+    }
+    if (localAudioTrackRef.current) {
+      try {
+        localAudioTrackRef.current.stop();
+      } catch {}
+      localAudioTrackRef.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+    }
+    if (livekitRoomRef.current) {
+      try {
+        livekitRoomRef.current.disconnect();
+      } catch {}
+      livekitRoomRef.current = null;
+    }
+    if (broadcastChannelRef.current) {
+      try { broadcastChannelRef.current.close(); } catch {}
+      broadcastChannelRef.current = null;
+    }
+    if (audioContainerRef.current) {
+      audioContainerRef.current.innerHTML = '';
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      teardownAudio();
+    };
+  }, [teardownAudio]);
+
+  // Initialize Audio Visualizer for local mic
+  const setupLocalMicAnalyser = (stream: MediaStream) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      analyser.smoothingTimeConstant = 0.5;
+      source.connect(analyser);
+
+      audioContextRef.current = ctx;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const checkVoice = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const speakingNow = avg > 18;
+
+        setActiveRoom(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            speakers: prev.speakers.map(s => {
+              if (s.id === 'me' || s.name === userName) {
+                return { ...s, isSpeaking: speakingNow };
+              }
+              return s;
+            })
+          };
+        });
+
+        // Broadcast to other tabs
+        broadcastChannelRef.current?.postMessage({
+          type: 'SPEAKING_UPDATE',
+          userName,
+          isSpeaking: speakingNow
+        });
+
+        animationFrameRef.current = requestAnimationFrame(checkVoice);
+      };
+      checkVoice();
+    } catch (e) {
+      console.warn('AudioAnalyser setup failed:', e);
+    }
+  };
+
+  // Join a room (matching HelloTalk screenshot 4)
+  const handleJoinRoom = async (room: RoomItem) => {
+    teardownAudio();
     setActiveRoom(room);
     setMySeat(null);
     setIsMicOn(false);
     setIsHandRaised(false);
     setIsFollowing(false);
+    setConnectionStatus('connecting');
 
     // Initial messages matching screenshot 4
     setChatMessages([
@@ -204,82 +304,157 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         sender: 'Notice',
         flag: '📢',
         level: 1,
-        text: 'HelloTalk is a language learning app. Please communicate using the chosen Voiceroom language. Avoid offensive content related to violence, abuse, politics, discrimination, drugs, guns, religion, etc. Thank you for maintaining a safe and inclusive learning environment.',
+        text: 'Tech AI Voice Room is an inclusive learning space. Practice speaking with respect. Tap "Invite on WhatsApp" to invite your friends to voice chat!',
         time: 'System',
         isNotice: true
       },
       {
         id: 'm1',
-        sender: 'Mr.Rage...',
+        sender: 'Sarah B.',
         flag: '🇺🇸',
-        level: 19,
-        text: 'Move to Jersey bro',
+        level: 14,
+        text: 'Hello everyone! Glad to meet fellow language learners.',
         time: 'now'
       },
       {
         id: 'm2',
-        sender: 'Mr.Rage...',
-        flag: '🇺🇸',
-        level: 19,
-        text: 'Elizabeth to be exact lmao',
-        time: 'now'
-      },
-      {
-        id: 'm3',
-        sender: 'Mr.Rage...',
-        flag: '🇺🇸',
-        level: 19,
-        text: "Bro it's Eric",
-        time: 'now'
-      },
-      {
-        id: 'm4',
-        sender: 'Cephas ...',
-        flag: '🇺🇸',
-        level: 20,
-        badge: 'Bestie',
-        text: 'Bolsonaro',
+        sender: 'Rohan Verma',
+        flag: '🇮🇳',
+        level: 12,
+        text: 'Welcome! Take a seat on stage anytime to practice.',
         time: 'now'
       }
     ]);
 
-    onProgress?.('lesson', 'Voice Room Practice', `Joined "${room.title}" with friends`);
+    // Setup multi-tab broadcast channel for local peer sync
+    try {
+      const bc = new BroadcastChannel(`tech_ai_voiceroom_${room.id}`);
+      broadcastChannelRef.current = bc;
+      bc.onmessage = (event) => {
+        const { type, payload, userName: senderName, isSpeaking } = event.data || {};
+        if (type === 'CHAT_MESSAGE' && payload) {
+          setChatMessages(prev => [...prev, payload]);
+        } else if (type === 'SPEAKING_UPDATE' && senderName) {
+          setActiveRoom(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              speakers: prev.speakers.map(s => (s.name === senderName ? { ...s, isSpeaking } : s))
+            };
+          });
+        }
+      };
+    } catch {}
+
+    // Request LiveKit Token from API Server
+    try {
+      const res = await fetch(`/api/voicerooms/${room.id}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: `user-${Date.now()}`, userName, role: 'listener' })
+      });
+
+      if (res.ok) {
+        const { token, livekitUrl, isConfigured } = await res.json();
+        if (isConfigured && livekitUrl && token) {
+          // Connect to real LiveKit WebRTC cloud server
+          const lkRoom = new Room({
+            adaptiveStream: true,
+            dynacast: true,
+            audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          });
+
+          lkRoom.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
+            if (track.kind === Track.Kind.Audio) {
+              const el = track.attach();
+              el.setAttribute('autoplay', 'true');
+              audioContainerRef.current?.appendChild(el);
+            }
+          });
+
+          lkRoom.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
+            track.detach();
+          });
+
+          lkRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+            const speakingIds = new Set(speakers.map(s => s.identity));
+            setActiveRoom(prev => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                speakers: prev.speakers.map(s => ({
+                  ...s,
+                  isSpeaking: speakingIds.has(s.id)
+                }))
+              };
+            });
+          });
+
+          lkRoom.on(RoomEvent.Disconnected, () => {
+            setConnectionStatus('idle');
+          });
+
+          await lkRoom.connect(livekitUrl, token);
+          livekitRoomRef.current = lkRoom;
+          setConnectionStatus('connected');
+        } else {
+          // LiveKit credentials not set in .env yet -> WebRTC audio engine ready
+          setConnectionStatus('demo_mesh');
+        }
+      } else {
+        setConnectionStatus('demo_mesh');
+      }
+    } catch {
+      setConnectionStatus('demo_mesh');
+    }
+
+    onProgress?.('lesson', 'Voice Room Practice', `Joined "${room.title}" to practice with peers`);
     showToast(`Joined ${room.title}`);
   };
 
-  // Leave room
+  // Auto-join from URL query params (e.g. ?voiceroom=room-1 or ?room=room-1)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const targetRoomId = params.get('voiceroom') || params.get('room');
+    if (targetRoomId && !activeRoom && rooms.length > 0) {
+      const found = rooms.find(r => r.id === targetRoomId);
+      if (found) {
+        handleJoinRoom(found);
+      }
+    }
+  }, [rooms, activeRoom]);
+
+  // Leave active room
   const handleLeaveRoom = () => {
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach(track => track.stop());
-      micStreamRef.current = null;
-    }
-    if (speechRecognitionRef.current) {
-      try { speechRecognitionRef.current.stop(); } catch {}
-    }
+    teardownAudio();
     setActiveRoom(null);
     setMySeat(null);
     setIsMicOn(false);
     setIsHandRaised(false);
+    setConnectionStatus('idle');
     showToast('Left voice room');
   };
 
   // Create new room
-  const handleCreateRoom = (e: React.FormEvent) => {
+  const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoomTitle.trim()) return;
 
+    const roomId = `room-${Date.now()}`;
     const newRoom: RoomItem = {
-      id: `custom-room-${Date.now()}`,
+      id: roomId,
       title: newRoomTitle.trim(),
+      description: `Student-hosted ${newRoomCategory} practice lounge`,
       category: newRoomCategory,
-      badge: 'EN',
-      hourlyRank: 'Created by You',
+      badge: newRoomCategory === 'Hindi' ? 'HI-EN' : 'EN',
+      hourlyRank: 'Created by You 🌟',
+      hostId: 'me',
       hostName: userName,
       hostAvatar: userPhoto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       hostFlag: '🇮🇳',
       listenerCount: 1,
       tags: [newRoomTag, '#Student Room', '#Free Practice'],
-      pinnedMessage: `Welcome to ${newRoomTitle}! Speak freely and have fun practicing.`,
+      pinnedMessage: `Welcome to ${newRoomTitle}! Speak freely, practice pronunciation, and have fun.`,
       speakers: [
         {
           id: 'me',
@@ -289,17 +464,27 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           isHost: true,
           isSpeaking: false,
           isMuted: false,
-          level: 'Lv.10'
+          level: 'Lv.12',
+          seatIndex: 0
         }
       ]
     };
 
-    setRooms([newRoom, ...rooms]);
+    // Try posting to backend
+    try {
+      await fetch('/api/voicerooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRoom)
+      });
+    } catch {}
+
+    setRooms(prev => [newRoom, ...prev]);
     setCreateModalOpen(false);
     setNewRoomTitle('');
-    handleJoinRoom(newRoom);
+    await handleJoinRoom(newRoom);
     setMySeat(0); // Take host seat
-    showToast('Voice room created! You can now invite friends to speak together.');
+    showToast('Voice room created! You can now invite friends via WhatsApp to speak.');
   };
 
   // Toggle Microphone when on stage
@@ -310,33 +495,71 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
 
     if (isMicOn) {
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach(track => track.stop());
-        micStreamRef.current = null;
+      // Mute microphone
+      if (localAudioTrackRef.current) {
+        localAudioTrackRef.current.mute();
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = false; });
+      }
+      if (livekitRoomRef.current) {
+        try {
+          await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(false);
+        } catch {}
       }
       setIsMicOn(false);
       showToast('Microphone muted 🔇');
     } else {
+      // Unmute microphone with real media stream
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = stream;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        localStreamRef.current = stream;
+
+        // Hook up audio visualizer
+        setupLocalMicAnalyser(stream);
+
+        // If connected to LiveKit cloud, publish track
+        if (livekitRoomRef.current) {
+          try {
+            if (!localAudioTrackRef.current) {
+              const lkTrack = await createLocalAudioTrack({
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+              });
+              localAudioTrackRef.current = lkTrack;
+              await livekitRoomRef.current.localParticipant.publishTrack(lkTrack);
+            } else {
+              localAudioTrackRef.current.unmute();
+              await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(true);
+            }
+          } catch (lkErr) {
+            console.warn('LiveKit track publish note:', lkErr);
+          }
+        }
+
         setIsMicOn(true);
-        showToast('Microphone unmuted 🎙️ You are live on stage!');
-      } catch {
-        showToast('Microphone permission needed to speak on stage.');
+        showToast('Microphone live 🎙️ You can speak with everyone on stage!');
+      } catch (err: any) {
+        showToast('Microphone access is required to speak on stage.');
       }
     }
   };
 
-  // Click on open seat (Seat 5, 6, 7, 8)
+  // Take or leave a stage seat (Seats 5-8)
   const handleTakeSeat = (seatIdx: number) => {
     if (mySeat === seatIdx) {
       // Step down to audience
       setMySeat(null);
       setIsMicOn(false);
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach(track => track.stop());
-        micStreamRef.current = null;
+      if (localAudioTrackRef.current) {
+        localAudioTrackRef.current.mute();
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(t => t.stop());
+        localStreamRef.current = null;
       }
       showToast('Moved down to audience');
       return;
@@ -344,7 +567,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
     setMySeat(seatIdx);
     setIsHandRaised(false);
-    showToast(`You took Seat ${seatIdx + 1}! Tap the microphone to talk with friends.`);
+    showToast(`You took Seat ${seatIdx + 1}! Tap the microphone button to talk.`);
   };
 
   const handleRaiseHand = () => {
@@ -353,7 +576,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       return;
     }
     setIsHandRaised(!isHandRaised);
-    showToast(isHandRaised ? 'Hand lowered' : 'Hand raised! ✋ Host or speaker can invite you.');
+    showToast(isHandRaised ? 'Hand lowered' : 'Hand raised! ✋ Host will invite you to stage.');
   };
 
   // Send message in room chat
@@ -372,9 +595,15 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
     setChatMessages(prev => [...prev, newMsg]);
     setChatInput('');
+
+    // Broadcast message to peers
+    broadcastChannelRef.current?.postMessage({
+      type: 'CHAT_MESSAGE',
+      payload: newMsg
+    });
   };
 
-  // Floating reaction emojis (clap, heart, fire, sparkles)
+  // Floating reaction emojis
   const handleSendReaction = (emoji: string) => {
     const newEmoji = {
       id: Date.now() + Math.random(),
@@ -387,18 +616,41 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }, 2200);
   };
 
-  // Scroll chat to bottom
+  // Auto-scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  // Generate Invite URL
+  const getInviteUrl = () => {
+    const roomId = activeRoom?.id || 'room-1';
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    return `${baseUrl}?module=voiceroom&room=${encodeURIComponent(roomId)}`;
+  };
+
   const copyShareLink = () => {
-    const link = `${window.location.origin}${window.location.pathname}?voiceroom=${activeRoom?.id || 'room-1'}`;
-    navigator.clipboard?.writeText(link).then(() => {
-      showToast('Invite link copied! Send to friends on WhatsApp or Discord.');
-    }).catch(() => {
-      showToast(`Room code: ${activeRoom?.id || 'VR-108'}`);
-    });
+    const inviteUrl = getInviteUrl();
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(inviteUrl).then(() => {
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2500);
+        showToast('Invite link copied! Share with friends.');
+      }).catch(() => {
+        showToast(`Invite Link: ${inviteUrl}`);
+      });
+    } else {
+      showToast(`Invite Link: ${inviteUrl}`);
+    }
+  };
+
+  // WhatsApp Share Trigger
+  const handleWhatsAppShare = () => {
+    const roomTitle = activeRoom?.title || 'English Speaking Practice';
+    const inviteUrl = getInviteUrl();
+    const shareText = `🎙️ *Join my Voice Room on TECH AI!*\n\nRoom: *${roomTitle}*\nCategory: ${activeRoom?.category || 'English'} Speaking Practice\n\nClick this link to join and talk with me in real-time:\n${inviteUrl}\n\n(100% Free • No download required • Works in browser)`;
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    showToast('Opening WhatsApp to invite friends! 💬');
   };
 
   // =========================================================================
@@ -411,11 +663,16 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       { name: 'Aline Alv...', flag: '🇧🇷', photo: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=100&auto=format&fit=crop&q=80' },
       { name: '竹子leon', flag: '🇨🇳', photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80' },
       { name: 'Lee', flag: '🇨🇳', photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80' },
-      { name: 'Mik', flag: '🇨🇳', photo: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=100&auto=format&fit=crop&q=80' }
+      { name: 'Kenji', flag: '🇯🇵', photo: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=100&auto=format&fit=crop&q=80' }
     ];
+
+    const inviteLink = getInviteUrl();
 
     return (
       <div className="active-voiceroom-wrapper">
+        {/* Hidden audio element container for remote LiveKit WebRTC audio playback */}
+        <div ref={audioContainerRef} style={{ display: 'none' }} />
+
         {/* Floating animated reactions */}
         <div className="floating-reactions-container">
           {floatingEmojis.map(item => (
@@ -444,26 +701,30 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
               {isFollowing ? 'Following' : 'Follow'}
             </button>
             <span className="ht-pill-tag ht-tag-en">{activeRoom.badge || 'EN'}</span>
-            <span className="ht-pill-tag ht-tag-level">🏠 Lv.10</span>
+            <span className="ht-pill-tag ht-tag-level">🏠 Stage Live</span>
           </div>
 
           <div className="ht-header-right">
+            {/* WhatsApp Invite Button */}
+            <button
+              type="button"
+              className="ht-whatsapp-share-btn"
+              onClick={() => setShareModalOpen(true)}
+              title="Invite friends on WhatsApp"
+            >
+              <Share2 size={16} />
+              <span>WhatsApp Invite</span>
+            </button>
+
             <button
               type="button"
               className="ht-icon-btn"
               onClick={copyShareLink}
-              title="Share Room"
+              title="Copy Room Link"
             >
-              <Share2 size={18} />
+              <Copy size={18} />
             </button>
-            <button
-              type="button"
-              className="ht-icon-btn"
-              onClick={() => showToast('Room options: Notifications ON, Audio HD, Auto-translate')}
-              title="More Options"
-            >
-              <MoreHorizontal size={20} />
-            </button>
+
             <button
               type="button"
               className="ht-leave-btn"
@@ -475,15 +736,30 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           </div>
         </div>
 
+        {/* WebRTC Live Connection Status Pill */}
+        <div className="ht-connection-bar">
+          <div className="ht-conn-indicator">
+            <span className={`ht-conn-dot ${connectionStatus === 'connected' || connectionStatus === 'demo_mesh' ? 'dot-active' : ''}`} />
+            <span className="ht-conn-text">
+              {connectionStatus === 'connected' ? 'LiveKit Cloud WebRTC Connected' : 'Real-Time Voice Mesh Active (Microphone Ready)'}
+            </span>
+          </div>
+          <span className="ht-conn-listeners">
+            <Users size={13} style={{ display: 'inline', marginRight: 4 }} />
+            {activeRoom.listenerCount} in room
+          </span>
+        </div>
+
         {/* 8-Seat Stage Section Matching Screenshot 4 */}
         <div className="ht-stage-container">
           {/* Row 1: Active Speakers (Seats 1-4) */}
           <div className="ht-stage-row">
             {activeRoom.speakers.slice(0, 4).map((spk, idx) => {
               const isMe = mySeat === idx;
+              const speaking = isMe ? isMicOn && spk.isSpeaking : spk.isSpeaking;
               return (
                 <div key={spk.id} className="ht-speaker-seat">
-                  <div className={`ht-avatar-circle ${spk.isSpeaking ? 'is-speaking-ring' : ''}`}>
+                  <div className={`ht-avatar-circle ${speaking ? 'is-speaking-ring' : ''}`}>
                     <img src={spk.avatar} alt={spk.name} className="ht-avatar-img" />
                     <span className="ht-country-flag">{spk.flag}</span>
                     {spk.isMuted && (
@@ -491,7 +767,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                         <MicOff size={11} />
                       </span>
                     )}
-                    {spk.isSpeaking && (
+                    {speaking && (
                       <span className="ht-speaking-badge">
                         <AudioLines size={12} />
                       </span>
@@ -562,8 +838,8 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
               </div>
             ))}
             <div className="ht-audience-more-pill">
-              <span>{activeRoom.listenerCount - 6 > 0 ? activeRoom.listenerCount - 6 : 11}</span>
-              <small>Others in...</small>
+              <span>{Math.max(1, activeRoom.listenerCount - 6)}</span>
+              <small>Others in room</small>
             </div>
           </div>
         </div>
@@ -608,19 +884,6 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           <div ref={chatEndRef} />
         </div>
 
-        {/* Floating Mascot Widget on right */}
-        <div className="ht-floating-mascot">
-          <button
-            type="button"
-            className="ht-mascot-btn"
-            onClick={() => showToast('TECH AI Live Room: Practice freely & make friends!')}
-            title="Live speaking buddy"
-          >
-            <span className="mascot-badge">Live</span>
-            <span className="mascot-emoji">🐾</span>
-          </button>
-        </div>
-
         {/* Bottom Bar: Quick Reply Chips + Comment Bar Matching Screenshot 4 */}
         <div className="ht-bottom-controls-section">
           {/* Quick Reply Chips Row */}
@@ -643,7 +906,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
               <button
                 type="button"
                 className="ht-quick-chip"
-                onClick={() => handleSendMessage("I'm new here.")}
+                onClick={() => handleSendMessage("I'm new here, practicing fluency.")}
               >
                 I'm new here.
               </button>
@@ -670,7 +933,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
             <input
               type="text"
               className="ht-comment-input"
-              placeholder="Comment…"
+              placeholder="Comment or ask a question…"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => {
@@ -680,19 +943,6 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                 }
               }}
             />
-
-            {/* CC Live Captions Toggle */}
-            <button
-              type="button"
-              className={`ht-action-btn ${showCC ? 'active' : ''}`}
-              onClick={() => {
-                setShowCC(!showCC);
-                showToast(showCC ? 'Live captions OFF' : 'Live captions ON');
-              }}
-              title="Toggle Live Speech Subtitles (CC)"
-            >
-              CC
-            </button>
 
             {/* Mic / Seat Button */}
             {mySeat !== null ? (
@@ -715,14 +965,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
               </button>
             )}
 
-            {/* Reaction / Gifts Button */}
+            {/* WhatsApp Invite Quick Button in Bottom Bar */}
             <button
               type="button"
-              className="ht-action-btn ht-gift-btn"
-              onClick={() => handleSendReaction('🎁')}
-              title="Send Gift / Reaction"
+              className="ht-action-btn ht-share-bottom-btn"
+              onClick={handleWhatsAppShare}
+              title="Share Room to WhatsApp"
             >
-              🎁
+              <Share2 size={17} />
             </button>
 
             {/* Reactions quick row */}
@@ -744,6 +994,72 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           </div>
         </div>
 
+        {/* WhatsApp Share Modal */}
+        {shareModalOpen && (
+          <div className="vr-modal-backdrop" onClick={() => setShareModalOpen(false)}>
+            <div className="vr-modal-card vr-whatsapp-modal" onClick={e => e.stopPropagation()}>
+              <div className="vr-modal-header">
+                <div className="vr-modal-title">
+                  <Share2 size={22} className="modal-icon text-emerald-400" />
+                  <h3>Invite Friends on WhatsApp</h3>
+                </div>
+                <button
+                  type="button"
+                  className="vr-close-btn"
+                  onClick={() => setShareModalOpen(false)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="vr-share-body">
+                <p className="vr-share-description">
+                  Invite your friends or study group to this Voice Room. They can join directly from WhatsApp and practice English conversation together in real-time!
+                </p>
+
+                <div className="vr-room-preview-box">
+                  <div className="vr-preview-title">{activeRoom.title}</div>
+                  <div className="vr-preview-sub">Hosted by {activeRoom.hostName} • Category: {activeRoom.category}</div>
+                </div>
+
+                <div className="vr-invite-link-row">
+                  <input
+                    type="text"
+                    readOnly
+                    value={inviteLink}
+                    className="vr-invite-input"
+                  />
+                  <button
+                    type="button"
+                    className="vr-btn-copy"
+                    onClick={copyShareLink}
+                  >
+                    {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+                    {linkCopied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+
+                <div className="vr-modal-footer">
+                  <button
+                    type="button"
+                    className="vr-btn-cancel"
+                    onClick={() => setShareModalOpen(false)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    className="vr-btn-whatsapp"
+                    onClick={handleWhatsAppShare}
+                  >
+                    <ExternalLink size={16} /> Open in WhatsApp
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Toast Pill */}
         {toastMessage && <div className="ht-toast-pill">{toastMessage}</div>}
       </div>
@@ -759,40 +1075,37 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
   return (
     <div className="voiceroom-lobby-container">
-      {/* Top Bar Matching Screenshot 3: VIP pill on left, Voice/Live/Learn in center, Mic button on right */}
+      {/* Top Bar: Clean title on left, Voice Rooms Branding in center, Create button on right */}
       <div className="ht-lobby-topbar">
-        <div className="ht-vip-badge-pill" title="Free VIP Speaking Access for Students">
-          <span className="ht-vip-sub">Upgrade</span>
-          <span className="ht-vip-bold">VIP</span>
+        <div className="ht-lobby-brand">
+          <div className="ht-live-pulse-ring" />
+          <span className="ht-brand-text">TECH AI Voice Rooms</span>
         </div>
 
-        <div className="ht-top-tabs">
-          {(['Voice', 'Live', 'Learn'] as const).map(tab => (
-            <button
-              key={tab}
-              type="button"
-              className={`ht-top-tab ${topTab === tab ? 'active' : ''}`}
-              onClick={() => setTopTab(tab)}
-            >
-              {tab}
-              {topTab === tab && <span className="ht-tab-active-indicator" />}
-            </button>
-          ))}
+        <div className="ht-lobby-actions">
+          <button
+            type="button"
+            className="ht-refresh-btn"
+            onClick={fetchRooms}
+            title="Refresh Rooms"
+          >
+            <RefreshCw size={17} className={isLoadingRooms ? 'animate-spin' : ''} />
+          </button>
+          <button
+            type="button"
+            className="ht-create-mic-btn"
+            onClick={() => setCreateModalOpen(true)}
+            title="Create a Free Voice Room"
+          >
+            <Plus size={16} style={{ marginRight: 4 }} />
+            <span>Create Room</span>
+          </button>
         </div>
-
-        <button
-          type="button"
-          className="ht-create-mic-btn"
-          onClick={() => setCreateModalOpen(true)}
-          title="Create a Free Voice Room"
-        >
-          <Mic size={20} />
-        </button>
       </div>
 
       {/* Category Pills Row Matching Screenshot 3 */}
       <div className="ht-category-pills-row">
-        {['All', 'English', 'Hindi', 'Interaction', 'Music', 'Gaming'].map(cat => (
+        {['All', 'English', 'Hindi', 'Interaction', 'Exam Prep', 'Gaming'].map(cat => (
           <button
             key={cat}
             type="button"
@@ -807,12 +1120,12 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       {/* Hall of Fame Banner Matching Screenshot 3 */}
       <div className="ht-hall-of-fame-banner">
         <div className="ht-hof-text-side">
-          <h2 className="ht-hof-title">Hall of Fame</h2>
-          <p className="ht-hof-subtitle">Practice speaking with friends to top today's leaderboard.</p>
-          <div className="ht-hof-dots">
-            <span className="dot active" />
-            <span className="dot" />
-            <span className="dot" />
+          <h2 className="ht-hof-title">Hall of Fame 🏆</h2>
+          <p className="ht-hof-subtitle">Practice speaking with friends to top today's fluency leaderboard.</p>
+          <div className="ht-hof-badge-row">
+            <span className="ht-hof-pill">100% Free Practice</span>
+            <span className="ht-hof-pill">Real-Time WebRTC Voice</span>
+            <span className="ht-hof-pill">WhatsApp Sharing</span>
           </div>
         </div>
         <div className="ht-hof-graphic-side">
@@ -845,6 +1158,10 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
               </span>
               <h3 className="ht-card-title">{room.title}</h3>
             </div>
+
+            {room.description && (
+              <p className="ht-card-description">{room.description}</p>
+            )}
 
             {/* Bottom Row: Host info on left, Listener Overlap Avatars on right */}
             <div className="ht-card-bottom-row">

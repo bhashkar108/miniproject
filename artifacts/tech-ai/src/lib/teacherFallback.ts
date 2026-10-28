@@ -1,10 +1,10 @@
 import type { LessonResponse } from '@workspace/api-client-react';
 
 /**
- * Intelligent local lesson fallback generator for AI Teacher.
+ * Intelligent multi-language local lesson fallback generator for AI Teacher.
  * Ensures the student always gets a rich, structured, college-level explanation
- * grounded in their uploaded document, notes, and question, even if the backend
- * API is offline or deployed statically on Vercel.
+ * grounded in their uploaded document, notes, and question in their chosen language
+ * (Hindi, English, Hinglish, Spanish, French, German, Bengali, Tamil, Telugu, Marathi, Gujarati, etc.).
  */
 export function generateLocalTeacherLesson(
   content: string,
@@ -21,23 +21,25 @@ export function generateLocalTeacherLesson(
   const detectedDocTitle = !isGenericHeader && firstLine.length > 3 && firstLine.length < 80 ? firstLine : '';
 
   const effectiveTopic = qClean || detectedDocTitle || (cClean.length > 60 ? cClean.slice(0, 60) + '…' : cClean) || 'Study Material Analysis';
+  const studySnippet = cClean.length > 120 ? cClean.slice(0, 120).replace(/\s+/g, ' ') : cClean.replace(/\s+/g, ' ');
 
-  // Extract primary subject keywords
-  const combinedText = `${qClean} ${cClean}`.toLowerCase();
   const langLower = language.toLowerCase();
-  const isHindi = langLower === 'hindi';
-  const isHinglish = langLower === 'hinglish';
-  const isSpanish = langLower === 'spanish';
+  const isHindi = langLower.includes('hindi') && !langLower.includes('hinglish');
+  const isHinglish = langLower.includes('hinglish');
+  const isSpanish = langLower.includes('spanish') || langLower.includes('español');
+  const isFrench = langLower.includes('french') || langLower.includes('français');
+  const isGerman = langLower.includes('german') || langLower.includes('deutsch');
+  const isBengali = langLower.includes('bengali') || langLower.includes('বাংলা');
+  const isTamil = langLower.includes('tamil') || langLower.includes('தமிழ்');
+  const isTelugu = langLower.includes('telugu') || langLower.includes('తెలుగు');
+  const isMarathi = langLower.includes('marathi') || langLower.includes('मराठी');
+  const isGujarati = langLower.includes('gujarati') || langLower.includes('ગુજરાતી');
 
-  // Extract a helpful snippet from user's document for grounding
-  const studySnippet = cClean.length > 20
-    ? cClean.slice(0, 180).replace(/\s+/g, ' ')
-    : '';
-
-  // Detect general subject domain
-  let domain = 'General Academic Concept';
-  if (/python|javascript|coding|algorithm|data structure|binary|tree|graph|software|function|loop|pointer|class|object/i.test(combinedText)) {
-    domain = 'Computer Science & Software Engineering';
+  // Domain categorization
+  const combinedText = `${cClean} ${qClean}`.toLowerCase();
+  let domain = 'General Academic & Scientific Studies';
+  if (/python|javascript|java|c\+\+|algorithm|function|data structure|react|database|sql|api|coding|code|loop/i.test(combinedText)) {
+    domain = 'Computer Science & Software Systems';
   } else if (/derivative|integral|matrix|equation|calculus|algebra|vector|probability|math|polynomial/i.test(combinedText)) {
     domain = 'Mathematics & Quantitative Analytics';
   } else if (/newton|force|velocity|energy|quantum|thermodynamics|physics|electric|magnetic|circuit/i.test(combinedText)) {
@@ -47,7 +49,7 @@ export function generateLocalTeacherLesson(
   } else if (/market|inflation|gdp|economy|demand|supply|investment|finance|trade/i.test(combinedText)) {
     domain = 'Economics & Financial Systems';
   } else if (/grammar|tense|sentence|noun|verb|adjective|pronunciation|vocabulary|clause/i.test(combinedText)) {
-    domain = 'English & Applied Linguistics';
+    domain = 'Language & Applied Linguistics';
   }
 
   // --- HINDI RESPONSE ---
@@ -114,6 +116,119 @@ Exams aur viva ke liye iske key terms, equations aur reasoning ko hamesha clear 
     };
   }
 
+  // --- BENGALI RESPONSE ---
+  if (isBengali) {
+    const title = qClean ? `প্রশ্ন ব্যাখ্যা: ${qClean}` : `নথি বিশ্লেষণ: ${effectiveTopic}`;
+    const explanation = `১. মূল ধারণা ও নথির সারসংক্ষেপ:
+${studySnippet ? `আপনার অধ্যয়ন উপাদান ("${studySnippet}...") অনুসারে` : 'প্রদত্ত অধ্যয়নের উপাদানের ভিত্তিতে'}, এই বিষয়টি ${domain}-এর একটি অত্যন্ত গুরুত্বপূর্ণ ভিত্তি। এটি বোঝার সহজ উপায় হলো এর মূল নিয়মাবলী ও কার্যপ্রণালী ধাপে ধাপে উপলব্ধি করা।
+
+২. বিস্তারিত বিশ্লেষণ:
+${qClean ? `আপনার নির্দিষ্ট প্রশ্ন "${qClean}" প্রসঙ্গে:` : 'নথির মূল বিষয়বস্তুর ভিত্তিতে:'}
+• প্রতিটি অংশ যৌক্তিক নিয়ম ও সুনির্দিষ্ট নীতি অনুসরণ করে কাজ করে।
+• বাস্তব জীবনে সমস্যা সমাধানের জন্য এই ধারণাটি প্রয়োগ করা হয়।
+
+৩. পরীক্ষার প্রস্তুতি ও পরামর্শ:
+মূল সূত্র এবং শর্তগুলো স্পষ্ট মনে রাখুন। পরীক্ষায় প্রতিটি ধাপ পরিচ্ছন্নভাবে উপস্থাপনা করুন।`;
+
+    return {
+      title,
+      explanation,
+      keyPoints: [
+        `মূল তত্ত্ব এবং সংজ্ঞা পরিষ্কারভাবে অনুধাবন করুন (${domain})।`,
+        'তাত্ত্বিক ধারণাকে বাস্তব উদাহরণ এবং অনুশীলনের সাথে যুক্ত করুন।',
+        'পরীক্ষার জন্য গুরুত্বপূর্ণ পয়েন্টগুলো পুনরাবৃত্তি করুন।'
+      ],
+      followUpQuestions: [
+        'বাস্তব জীবনে এই ধারণার প্রধান প্রয়োগ কী?',
+        'পরীক্ষায় এই বিষয়ে সাধারণত কী ধরনের প্রশ্ন আসে?'
+      ]
+    };
+  }
+
+  // --- TAMIL RESPONSE ---
+  if (isTamil) {
+    const title = qClean ? `விளக்கம்: ${qClean}` : `ஆய்வு விளக்கம்: ${effectiveTopic}`;
+    const explanation = `1. அடிப்படைக் கருத்து மற்றும் ஆய்வுச் சுருக்கம்:
+${studySnippet ? `உங்கள் ஆவணத்தின் ("${studySnippet}...") அடிப்படையில்` : 'வழங்கப்பட்ட ஆய்வுப் பொருட்களின்படி'}, இது ${domain} துறையில் மிக முக்கியமான ஒரு பகுதியாகும்.
+
+2. விரிவான பகுப்பாய்வு:
+${qClean ? `உங்கள் கேள்வி "${qClean}" தொடர்பாக:` : 'பாடக் குறிப்புகளின்படி:'}
+• ஒவ்வொரு படிநிலையும் முறையான தர்க்கரீதியான கொள்கைகளைப் பின்பற்றுகிறது.
+• நிஜ வாழ்க்கைச் சிக்கல்களுக்குத் தீர்வு காண இந்த முறை பயன்படுகிறது.
+
+3. தேர்வுக்கான குறிப்புகள்:
+முக்கிய சூத்திரங்கள் மற்றும் வரைபடங்களைத் தெளிவாக நினைவில் கொள்ளுங்கள்.`;
+
+    return {
+      title,
+      explanation,
+      keyPoints: [
+        `அடிப்படைக் கருத்துக்கள் மற்றும் வரையறைகளைத் தெளிவாகப் புரிந்து கொள்ளுங்கள் (${domain}).`,
+        'படிநிலைகளை முறையாகப் பின்பற்றுங்கள்.'
+      ],
+      followUpQuestions: [
+        'இந்தக் கருத்தின் மிக முக்கியமான நடைமுறை பயன்பாடு என்ன?',
+        'தேர்வில் இதில் இருந்து கேட்கப்படும் முக்கிய வினாக்கள் யாவை?'
+      ]
+    };
+  }
+
+  // --- TELUGU RESPONSE ---
+  if (isTelugu) {
+    const title = qClean ? `వివరణ: ${qClean}` : `విశ్లేషణ: ${effectiveTopic}`;
+    const explanation = `1. మూల భావన మరియు సారాంశం:
+${studySnippet ? `మీ అధ్యయన పత్రం ("${studySnippet}...") ఆధారంగా` : 'అధ్యయన సామగ్రి ఆధారంగా'}, ఈ అంశం ${domain} లో కీలకమైనది.
+
+2. దశలవారీ విశ్లేషణ:
+${qClean ? `మీ ప్రశ్న "${qClean}" సందర్భంలో:` : 'కీలక అంశాల ఆధారంగా:'}
+• ప్రతి భాగం ఒక క్రమబద్ధమైన శాస్త్రీయ సూత్రాన్ని పాటిస్తుంది.
+• నిజ జీవితంలో సమస్యలను పరిష్కరించడానికి ఇది ఉపయోగపడుతుంది.
+
+3. పరీక్షల సూచనలు:
+ముఖ్యమైన నిర్వచనాలు మరియు సూత్రాలను క్రమం తప్పకుండా పునశ్చరణ చేయండి.`;
+
+    return {
+      title,
+      explanation,
+      keyPoints: [
+        `ప్రాథమిక నిర్వచనాలు మరియు సూత్రాలను అర్థం చేసుకోండి (${domain}).`,
+        'వాస్తవిక ఉదాహరణలతో అన్వయించండి.'
+      ],
+      followUpQuestions: [
+        'ఈ భావన యొక్క ముఖ్యమైన ప్రయోజనం ఏమిటి?',
+        'పరీక్షలో దీనిపై ఎలాంటి ప్రశ్నలు అడుగుతారు?'
+      ]
+    };
+  }
+
+  // --- MARATHI RESPONSE ---
+  if (isMarathi) {
+    const title = qClean ? `स्पष्टीकरण: ${qClean}` : `अभ्यास विश्लेषण: ${effectiveTopic}`;
+    const explanation = `1. मूळ संकल्पना आणि सारांश:
+${studySnippet ? `तुमच्या अभ्यास दस्तावेजानुसार ("${studySnippet}...")` : 'अभ्यास साहित्याच्या आधारे'}, हा विषय ${domain} चा अत्यंत महत्त्वाचा घटक आहे.
+
+2. सविस्तर विश्लेषण:
+${qClean ? `तुमच्या प्रश्नानुसार "${qClean}":` : 'मुख्य मुद्द्यांच्या आधारे:'}
+• प्रत्येक टप्पा वैज्ञानिक आणि तार्किक नियमांवर आधारित आहे.
+• प्रत्यक्ष व्यवहारात समस्या सोडवण्यासाठी याचा वापर केला जातो.
+
+3. परीक्षा टिप्स:
+महत्त्वाचे सूत्र आणि व्याख्या लक्षात ठेवा आणि परीक्षेत आकृत्यांसह स्पष्ट करा.`;
+
+    return {
+      title,
+      explanation,
+      keyPoints: [
+        `मूळ संकल्पना आणि व्याख्या समजून घ्या (${domain}).`,
+        'प्रत्यक्ष उदाहरणांसह अभ्यास करा.'
+      ],
+      followUpQuestions: [
+        'या संकल्पनेचे प्रत्यक्ष जीवनातील उपयोग काय आहेत?',
+        'परीक्षेच्या दृष्टीने महत्त्वाचे प्रश्न कोणते?'
+      ]
+    };
+  }
+
   // --- SPANISH RESPONSE ---
   if (isSpanish) {
     const title = qClean ? `Explicación: ${qClean}` : `Análisis: ${effectiveTopic}`;
@@ -141,6 +256,62 @@ Dominar estos principios facilita el desarrollo de soluciones analíticas y prep
         '¿Cuál es la aplicación práctica más importante de este concepto?',
         '¿Cómo resolverías un problema típico de examen sobre este tema?',
         '¿Cuáles son los errores más comunes al aplicar esta teoría?'
+      ]
+    };
+  }
+
+  // --- FRENCH RESPONSE ---
+  if (isFrench) {
+    const title = qClean ? `Explication : ${qClean}` : `Analyse : ${effectiveTopic}`;
+    const explanation = `1. Fondements et Synthèse du Document :
+${studySnippet ? `D'après vos documents d'étude ("${studySnippet}...")` : 'À partir des documents fournis'}, ce sujet est un pilier majeur dans le domaine de ${domain}.
+
+2. Décomposition Étape par Étape :
+${qClean ? `Concernant votre question "${qClean}" :` : 'Points saillants du document :'}
+• Chaque élément respecte une structure logique et rigoureuse.
+• Les applications concrètes permettent de résoudre efficacement des problèmes complexes.
+
+3. Conseils Pratiques pour les Examens :
+Mémorisez les définitions clés et illustrez vos réponses par des schémas précis.`;
+
+    return {
+      title,
+      explanation,
+      keyPoints: [
+        `Maîtriser les principes fondamentaux de ${domain}.`,
+        'Appliquer une démarche analytique structurée.'
+      ],
+      followUpQuestions: [
+        'Quelle est la principale application industrielle de ce concept ?',
+        'Quels sont les pièges fréquents lors des examens ?'
+      ]
+    };
+  }
+
+  // --- GERMAN RESPONSE ---
+  if (isGerman) {
+    const title = qClean ? `Erklärung: ${qClean}` : `Analyse: ${effectiveTopic}`;
+    const explanation = `1. Grundkonzept und Zusammenfassung:
+${studySnippet ? `Basierend auf Ihrem Dokument ("${studySnippet}...")` : 'Anhand Ihrer Lernunterlagen'}, ist dieses Thema ein wesentlicher Baustein im Bereich ${domain}.
+
+2. Schritt-für-Schritt-Analyse:
+${qClean ? `Bezüglich Ihrer Frage "${qClean}":` : 'Wichtigste Punkte des Dokuments:'}
+• Jeder Schritt folgt klaren analytischen und wissenschaftlichen Prinzipien.
+• In der Praxis dient dieses Konzept zur Lösung anspruchsvoller Aufgaben.
+
+3. Prüfungstipps:
+Strukturieren Sie Ihre Antworten übersichtlich und verknüpfen Sie Formeln mit praktischen Beispielen.`;
+
+    return {
+      title,
+      explanation,
+      keyPoints: [
+        `Verstehen der Kernkonzepte von ${domain}.`,
+        'Schrittweises Vorgehen bei der Problemlösung.'
+      ],
+      followUpQuestions: [
+        'Was ist das wichtigste Anwendungsbeispiel in der Praxis?',
+        'Welche typischen Prüfungsfragen werden hierzu gestellt?'
       ]
     };
   }

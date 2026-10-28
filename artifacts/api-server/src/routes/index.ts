@@ -7,6 +7,7 @@ import profileRouter from "./profile";
 import progressRouter from "./progress";
 import quizzesRouter from "./quizzes";
 import teacherRouter from "./teacher";
+import voiceRoomsRouter from "./voiceRooms";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(formsRouter);
 router.use(equationsRouter);
 router.use(quizzesRouter);
 router.use(progressRouter);
+router.use(voiceRoomsRouter);
 
 export default router;

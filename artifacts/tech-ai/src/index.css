@@ -5406,3 +5406,269 @@
   z-index: 100;
   animation: fadeInOut 2.5s forwards;
 }
+
+/* ==========================================================================
+   VoiceRoom Enhanced Styling (Dark Navy, WhatsApp Invite, WebRTC Status)
+   ========================================================================== */
+.ht-lobby-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ht-live-pulse-ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulseGreen 1.8s infinite;
+}
+
+@keyframes pulseGreen {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.ht-brand-text {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.ht-lobby-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ht-refresh-btn {
+  background: #1a162b;
+  border: 1px solid #332954;
+  color: #a49fc4;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ht-refresh-btn:hover {
+  background: #282046;
+  color: #ffffff;
+}
+
+.ht-create-mic-btn {
+  background: linear-gradient(135deg, #7954ff 0%, #6366f1 100%);
+  border: none;
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 4px 14px rgba(121, 84, 255, 0.35);
+  transition: all 0.2s;
+}
+
+.ht-create-mic-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(121, 84, 255, 0.5);
+}
+
+.ht-whatsapp-share-btn {
+  background: #059669;
+  border: 1px solid #10b981;
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s;
+}
+
+.ht-whatsapp-share-btn:hover {
+  background: #047857;
+  transform: translateY(-1px);
+}
+
+.ht-share-bottom-btn {
+  background: #059669 !important;
+  color: #ffffff !important;
+  border-color: #10b981 !important;
+}
+
+.ht-connection-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #110e1c;
+  border-bottom: 1px solid #231b3b;
+  font-size: 11px;
+}
+
+.ht-conn-indicator {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ht-conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.ht-conn-dot.dot-active {
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.ht-conn-text {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.ht-conn-listeners {
+  color: #c4b5fd;
+  font-weight: 600;
+}
+
+.ht-card-description {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 6px 0 12px 0;
+  line-height: 1.4;
+}
+
+.ht-hof-badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.ht-hof-pill {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+/* WhatsApp Share Modal */
+.vr-whatsapp-modal {
+  max-width: 480px;
+  background: #171329;
+  border: 1px solid #3d2f66;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.vr-share-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vr-share-description {
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.vr-room-preview-box {
+  background: #201a38;
+  border: 1px solid #3e2d6b;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.vr-preview-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.vr-preview-sub {
+  font-size: 12px;
+  color: #a78bfa;
+}
+
+.vr-invite-link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.vr-invite-input {
+  flex: 1;
+  background: #120e22;
+  border: 1px solid #332657;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  outline: none;
+}
+
+.vr-btn-copy {
+  background: #2d234d;
+  border: 1px solid #483877;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.vr-btn-copy:hover {
+  background: #3b2e65;
+}
+
+.vr-btn-whatsapp {
+  background: #059669;
+  border: none;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  transition: all 0.2s;
+}
+
+.vr-btn-whatsapp:hover {
+  background: #047857;
+  transform: translateY(-1px);
+}
+

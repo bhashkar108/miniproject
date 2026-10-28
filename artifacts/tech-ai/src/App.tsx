@@ -175,22 +175,141 @@ async function compressProfilePhoto(file:File):Promise<string> {
   }finally{bitmap.close();}
 }
 
-async function canvasBlob(canvas:HTMLCanvasElement,mime:string,targetBytes:number):Promise<Blob>{
-  let best:Blob|null=null;
-  for(const scale of [1,.85,.7,.55,.4,.28]){
-    const target=document.createElement('canvas');
-    target.width=Math.max(1,Math.round(canvas.width*scale));target.height=Math.max(1,Math.round(canvas.height*scale));
-    const context=target.getContext('2d');if(!context)throw new Error('Your browser could not prepare the processed copy.');
-    context.drawImage(canvas,0,0,target.width,target.height);
-    for(const quality of mime==='image/jpeg'?[.9,.78,.64,.5,.36,.22]:[undefined]){
-      const blob=await new Promise<Blob>((resolve,reject)=>target.toBlob(result=>result?resolve(result):reject(new Error('Could not compress this document.')),mime,quality));
-      if(!best||blob.size<best.size)best=blob;
-      if(blob.size<=targetBytes){target.width=0;target.height=0;return blob;}
+async function canvasBlob(canvas: HTMLCanvasElement, mime: string, targetBytes: number): Promise<Blob> {
+  const getBlob = (c: HTMLCanvasElement, q?: number): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      c.toBlob(result => result ? resolve(result) : reject(new Error('Could not compress this document.')), mime, q);
+    });
+  };
+
+  const drawScaled = (scale: number): HTMLCanvasElement => {
+    const target = document.createElement('canvas');
+    target.width = Math.max(1, Math.round(canvas.width * scale));
+    target.height = Math.max(1, Math.round(canvas.height * scale));
+    const context = target.getContext('2d');
+    if (!context) throw new Error('Your browser could not prepare the processed copy.');
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(canvas, 0, 0, target.width, target.height);
+    return target;
+  };
+
+  if (mime === 'image/jpeg') {
+    // 1. Check full scale at high quality
+    let scale = 1.0;
+    let tCanvas = drawScaled(scale);
+    let blob = await getBlob(tCanvas, 0.92);
+
+    if (blob.size <= targetBytes) {
+      // Test if even higher quality (0.96) fits under target
+      try {
+        const highBlob = await getBlob(tCanvas, 0.96);
+        tCanvas.width = 0; tCanvas.height = 0;
+        return highBlob.size <= targetBytes ? highBlob : blob;
+      } catch {
+        tCanvas.width = 0; tCanvas.height = 0;
+        return blob;
+      }
     }
-    target.width=0;target.height=0;
+
+    // 2. Binary search quality between 0.08 and 0.92 at scale 1.0
+    let lowQ = 0.08;
+    let highQ = 0.92;
+    let bestUnder: Blob | null = null;
+
+    for (let iter = 0; iter < 7; iter++) {
+      const midQ = (lowQ + highQ) / 2;
+      const b = await getBlob(tCanvas, midQ);
+      if (b.size <= targetBytes) {
+        bestUnder = b;
+        lowQ = midQ; // try higher quality closer to target
+      } else {
+        highQ = midQ;
+      }
+    }
+
+    // If quality binary search at scale 1.0 found a result that is >= 88% of targetBytes, return it!
+    if (bestUnder && bestUnder.size >= targetBytes * 0.88) {
+      tCanvas.width = 0; tCanvas.height = 0;
+      return bestUnder;
+    }
+
+    tCanvas.width = 0; tCanvas.height = 0;
+
+    // 3. Binary search scale & quality iteratively to hit exact targetBytes
+    let lowScale = 0.15;
+    let highScale = 1.0;
+    let candidateBlob: Blob | null = bestUnder;
+
+    for (let sIter = 0; sIter < 6; sIter++) {
+      const midScale = (lowScale + highScale) / 2;
+      const curCanvas = drawScaled(midScale);
+
+      let lQ = 0.2;
+      let hQ = 0.92;
+      let localBest: Blob | null = null;
+
+      for (let qIter = 0; qIter < 5; qIter++) {
+        const mQ = (lQ + hQ) / 2;
+        const b = await getBlob(curCanvas, mQ);
+        if (b.size <= targetBytes) {
+          localBest = b;
+          lQ = mQ;
+        } else {
+          hQ = mQ;
+        }
+      }
+
+      curCanvas.width = 0; curCanvas.height = 0;
+
+      if (localBest) {
+        candidateBlob = localBest;
+        if (localBest.size >= targetBytes * 0.94) {
+          return localBest;
+        }
+        lowScale = midScale;
+      } else {
+        highScale = midScale;
+      }
+    }
+
+    if (candidateBlob) return candidateBlob;
+    const fallbackCanvas = drawScaled(0.2);
+    const fb = await getBlob(fallbackCanvas, 0.35);
+    fallbackCanvas.width = 0; fallbackCanvas.height = 0;
+    return fb;
+  } else {
+    // PNG or non-JPEG formats (where quality is ignored by browser canvas)
+    let lowScale = 0.1;
+    let highScale = 1.0;
+    let bestUnder: Blob | null = null;
+
+    const full = drawScaled(1.0);
+    const fullBlob = await getBlob(full);
+    full.width = 0; full.height = 0;
+    if (fullBlob.size <= targetBytes) return fullBlob;
+
+    for (let iter = 0; iter < 8; iter++) {
+      const midScale = (lowScale + highScale) / 2;
+      const t = drawScaled(midScale);
+      const b = await getBlob(t);
+      t.width = 0; t.height = 0;
+
+      if (b.size <= targetBytes) {
+        bestUnder = b;
+        if (b.size >= targetBytes * 0.94) return b;
+        lowScale = midScale;
+      } else {
+        highScale = midScale;
+      }
+    }
+
+    if (bestUnder) return bestUnder;
+    const minCanvas = drawScaled(0.12);
+    const minBlob = await getBlob(minCanvas);
+    minCanvas.width = 0; minCanvas.height = 0;
+    return minBlob;
   }
-  if(!best)throw new Error('Could not create a processed copy.');
-  return best;
 }
 
 function cropCanvas(source:HTMLCanvasElement,cropPercent:number){
@@ -208,7 +327,15 @@ function fileSizeLabel(size:number){return size<1024*1024?`${(size/1024).toFixed
 function AppContent() {
   const [path, setPath] = useLocation();
   const queryClient = useQueryClient();
-  const [module, setModule] = useState<Module>('home');
+  const [module, setModule] = useState<Module>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const mod = p.get('module');
+      if (mod === 'voiceroom' || mod === 'voice' || mod === 'teacher') return mod as Module;
+      if (p.get('room') || p.get('voiceroom')) return 'voiceroom';
+    }
+    return 'home';
+  });
   const [theme, setTheme] = useState(() => localStorage.getItem('techai-theme') || 'light');
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>(() => {
     const saved=localStorage.getItem('techai-language');
@@ -827,7 +954,10 @@ function AppContent() {
           await sourcePage.render({canvas,canvasContext:context,viewport}).promise;
           const mime=output? 'image/jpeg':outputFormat;
           const cropped=cropCanvas(canvas,cropPercent);
-          const blob=await canvasBlob(cropped,mime,Math.max(12_000,(targetSizeKb*1024)/pageCount));
+          const targetBytesPerSheet = output
+            ? Math.max(8_000, Math.floor(((targetSizeKb * 1024) - (pageCount * 450 + 1500)) / pageCount))
+            : Math.max(8_000, (targetSizeKb * 1024) / pageCount);
+          const blob=await canvasBlob(cropped,mime,targetBytesPerSheet);
           if(output){
             const image=await output.embedJpg(new Uint8Array(await blob.arrayBuffer()));
             const page=output.addPage([cropped.width*.75,cropped.height*.75]);
@@ -868,7 +998,8 @@ function AppContent() {
         context.drawImage(image,-width/2,-height/2,width,height);
         const cropped=cropCanvas(canvas,cropPercent);
         if(outputFormat==='application/pdf'){
-          const jpg=await canvasBlob(cropped,'image/jpeg',targetSizeKb*1024);
+          const targetJpgBytes = Math.max(8_000, (targetSizeKb * 1024) - 2400);
+          const jpg=await canvasBlob(cropped,'image/jpeg',targetJpgBytes);
           const output=await PDFDocument.create();const embedded=await output.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
           const page=output.addPage([embedded.width*.75,embedded.height*.75]);page.drawImage(embedded,{x:0,y:0,width:page.getWidth(),height:page.getHeight()});
           const pdfBytes=await output.save();const blob=new Blob([pdfBytes.buffer.slice(pdfBytes.byteOffset,pdfBytes.byteOffset+pdfBytes.byteLength) as ArrayBuffer],{type:'application/pdf'});
