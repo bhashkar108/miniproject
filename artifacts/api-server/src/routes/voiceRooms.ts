@@ -5,110 +5,120 @@ import { eq, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-// Fallback in-memory storage if PostgreSQL is not active
-interface InMemSpeaker {
+export interface VoiceRoomData {
   id: string;
   name: string;
-  avatar: string;
-  flag: string;
-  isHost?: boolean;
-  isSpeaking?: boolean;
-  isMuted?: boolean;
-  level?: string;
-  role?: "host" | "speaker" | "listener";
-  seatIndex?: number | null;
-}
-
-interface InMemRoom {
-  id: string;
-  title: string;
-  description?: string;
   category: string;
-  badge?: string;
-  hourlyRank?: string;
-  hostId: string;
-  hostName: string;
-  hostAvatar: string;
-  hostFlag: string;
-  listenerCount: number;
-  speakers: InMemSpeaker[];
-  tags: string[];
-  pinnedMessage?: string;
+  host: string;
+  initials: string;
+  count: number;
+  capacity: number;
+  access: "Public" | "Private";
+  approval: boolean;
+  allowMembers: boolean;
+  description: string;
+  color: string;
+  live: boolean;
+  created?: boolean;
   createdAt: string;
 }
 
-const memoryRooms: Map<string, InMemRoom> = new Map([
+const memoryRooms: Map<string, VoiceRoomData> = new Map([
   [
-    "room-1",
+    "demo-english",
     {
-      id: "room-1",
-      title: "English Fluency & Daily Chit-Chat 🌟",
-      description: "Friendly stage open for everyone who wants to build English confidence.",
-      category: "English",
-      badge: "EN",
-      hourlyRank: "Hourly No. 1 🔥",
-      hostId: "host-1",
-      hostName: "MH SA",
-      hostAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-      hostFlag: "🇰🇷",
-      listenerCount: 42,
-      tags: ["#English Learning", "#Global Lounge", "#Fluency Practice"],
-      pinnedMessage: "If you speak English or want to practice, you can come up on stage! Everyone is welcome.",
+      id: "demo-english",
+      name: "English Speaking Circle",
+      category: "Language Practice",
+      host: "Aarav Sharma",
+      initials: "AS",
+      count: 6,
+      capacity: 12,
+      access: "Public",
+      approval: false,
+      allowMembers: true,
+      description: "Build confidence, practice daily English, and make new friends.",
+      color: "linear-gradient(135deg,#e6a7ff,#6d86ff)",
+      live: true,
       createdAt: new Date().toISOString(),
-      speakers: [
-        { id: "s1", name: "MH SA", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80", flag: "🇰🇷", isHost: true, isSpeaking: false, isMuted: false, level: "Lv.15", seatIndex: 0, role: "host" },
-        { id: "s2", name: "Cephas 石谦", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80", flag: "🇺🇸", isSpeaking: false, isMuted: true, level: "Lv.12", seatIndex: 1, role: "speaker" },
-        { id: "s3", name: "Tayla", avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80", flag: "🇬🇧", isSpeaking: false, isMuted: false, level: "Lv.10", seatIndex: 2, role: "speaker" },
-        { id: "s4", name: "WW", avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80", flag: "🇺🇸", isSpeaking: true, isMuted: false, level: "Lv.16", seatIndex: 3, role: "speaker" }
-      ]
-    }
+    },
   ],
   [
-    "room-2",
+    "demo-study",
     {
-      id: "room-2",
-      title: "Help Me Translate · Hindi & English Exchange 🇮🇳",
-      description: "Bilingual room for students practicing Hindi to English translation.",
-      category: "Hindi",
-      badge: "HI-EN",
-      hourlyRank: "Trending ⚡",
-      hostId: "host-2",
-      hostName: "Rohan Verma",
-      hostAvatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80",
-      hostFlag: "🇮🇳",
-      listenerCount: 28,
-      tags: ["#Help me translate", "#Hindi-English", "#Speaking Practice"],
-      pinnedMessage: "Practice speaking English and Hindi freely without fear of making mistakes!",
+      id: "demo-study",
+      name: "Study With Me · Focus Room",
+      category: "Education",
+      host: "Priya Verma",
+      initials: "PV",
+      count: 4,
+      capacity: 8,
+      access: "Public",
+      approval: true,
+      allowMembers: true,
+      description: "Quiet accountability, study goals, and a little motivation.",
+      color: "linear-gradient(135deg,#f9c47b,#e87b9c)",
+      live: true,
       createdAt: new Date().toISOString(),
-      speakers: [
-        { id: "s5", name: "Rohan Verma", avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80", flag: "🇮🇳", isHost: true, isSpeaking: false, isMuted: false, level: "Lv.11", seatIndex: 0, role: "host" },
-        { id: "s6", name: "Sarah B.", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80", flag: "🇺🇸", isSpeaking: false, isMuted: false, level: "Lv.14", seatIndex: 1, role: "speaker" }
-      ]
-    }
+    },
   ],
   [
-    "room-3",
+    "demo-lounge",
     {
-      id: "room-3",
-      title: "Daily Confidence Lab & Job Interview Prep 💼",
-      description: "Mock questions, self-introduction, and constructive accent feedback.",
-      category: "English",
-      badge: "EN",
-      hourlyRank: "Popular ⭐",
-      hostId: "host-3",
-      hostName: "Anthony 安瀚辰",
-      hostAvatar: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80",
-      hostFlag: "🇺🇸",
-      listenerCount: 35,
-      tags: ["#English Learning", "#Job Prep", "#Confidence"],
-      pinnedMessage: "Welcome! Today we practice: 'Tell me about yourself' and college viva topics.",
+      id: "demo-lounge",
+      name: "Late Night Chai Lounge",
+      category: "General",
+      host: "Kabir Singh",
+      initials: "KS",
+      count: 9,
+      capacity: 12,
+      access: "Public",
+      approval: false,
+      allowMembers: true,
+      description: "Relaxed conversations, new perspectives, good company.",
+      color: "linear-gradient(135deg,#77d6ca,#5c8cff)",
+      live: true,
       createdAt: new Date().toISOString(),
-      speakers: [
-        { id: "s7", name: "Anthony 安瀚辰", avatar: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop&q=80", flag: "🇺🇸", isHost: true, isSpeaking: true, isMuted: false, level: "Lv.14", seatIndex: 0, role: "host" },
-        { id: "s8", name: "Priya S.", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80", flag: "🇮🇳", isSpeaking: false, isMuted: true, level: "Lv.9", seatIndex: 1, role: "speaker" }
-      ]
-    }
-  ]
+    },
+  ],
+  [
+    "demo-game",
+    {
+      id: "demo-game",
+      name: "Game Talk Arena",
+      category: "Gaming",
+      host: "Rohan Mehta",
+      initials: "RM",
+      count: 3,
+      capacity: 8,
+      access: "Public",
+      approval: false,
+      allowMembers: true,
+      description: "Talk strategies, share your favourite games, find teammates.",
+      color: "linear-gradient(135deg,#ff9b70,#a66bff)",
+      live: true,
+      createdAt: new Date().toISOString(),
+    },
+  ],
+  [
+    "demo-movie",
+    {
+      id: "demo-movie",
+      name: "Movies & Music Club",
+      category: "Entertainment",
+      host: "Ananya Rao",
+      initials: "AR",
+      count: 5,
+      capacity: 12,
+      access: "Public",
+      approval: false,
+      allowMembers: true,
+      description: "What are you watching or listening to this week?",
+      color: "linear-gradient(135deg,#ff9fca,#8872ff)",
+      live: true,
+      createdAt: new Date().toISOString(),
+    },
+  ],
 ]);
 
 // 1. List all active VoiceRooms
@@ -117,52 +127,28 @@ router.get("/voicerooms", async (_req, res) => {
     try {
       const dbRooms = await db.select().from(voiceRoomsTable).orderBy(desc(voiceRoomsTable.createdAt));
       if (dbRooms.length > 0) {
-        // Merge with participants
-        const roomsWithParticipants = await Promise.all(
-          dbRooms.map(async (r) => {
-            const participants = await db
-              .select()
-              .from(voiceRoomParticipantsTable)
-              .where(eq(voiceRoomParticipantsTable.roomId, r.id));
-
-            const speakers = participants
-              .filter((p) => p.seatIndex !== null)
-              .map((p) => ({
-                id: p.userId,
-                name: p.userName,
-                avatar: p.userAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-                flag: p.userFlag || "🇮🇳",
-                isHost: p.role === "host",
-                isSpeaking: false,
-                isMuted: p.isMuted,
-                level: "Lv.10",
-                seatIndex: p.seatIndex,
-                role: p.role as "host" | "speaker" | "listener"
-              }));
-
-            return {
-              id: r.id,
-              title: r.title,
-              description: r.description || "",
-              category: r.category,
-              badge: r.category === "Hindi" ? "HI-EN" : "EN",
-              hourlyRank: "Active ⭐",
-              hostId: r.hostId,
-              hostName: r.hostName,
-              hostAvatar: r.hostAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-              hostFlag: r.hostFlag || "🇮🇳",
-              listenerCount: Math.max(1, participants.length),
-              speakers,
-              tags: (r.tags as string[]) || ["#English Practice"],
-              pinnedMessage: r.pinnedMessage || `Welcome to ${r.title}!`
-            };
-          })
-        );
-        res.json({ success: true, rooms: roomsWithParticipants });
+        const rooms = dbRooms.map((r) => ({
+          id: r.id,
+          name: r.title,
+          category: r.category,
+          host: r.hostName,
+          initials: r.hostName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "VR",
+          count: 1,
+          capacity: r.maxParticipants || 12,
+          access: (r.isPrivate ? "Private" : "Public") as "Public" | "Private",
+          approval: r.requireApproval || false,
+          allowMembers: true,
+          description: r.description || "Come in and join the conversation.",
+          color: "linear-gradient(135deg,#8b82ff,#56b5e9)",
+          live: true,
+          created: false,
+          createdAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
+        }));
+        res.json({ success: true, rooms });
         return;
       }
     } catch {
-      // DB offline or table not migrated, safely continue with in-memory store
+      // DB offline, fall back to memory
     }
 
     res.json({ success: true, rooms: Array.from(memoryRooms.values()) });
@@ -175,60 +161,42 @@ router.get("/voicerooms", async (_req, res) => {
 router.get("/voicerooms/:id", async (req, res) => {
   const roomId = req.params.id;
   try {
+    const memRoom = memoryRooms.get(roomId);
+    if (memRoom) {
+      res.json({ success: true, room: memRoom });
+      return;
+    }
+
     try {
       const [r] = await db.select().from(voiceRoomsTable).where(eq(voiceRoomsTable.id, roomId));
       if (r) {
-        const participants = await db
-          .select()
-          .from(voiceRoomParticipantsTable)
-          .where(eq(voiceRoomParticipantsTable.roomId, r.id));
-
-        const speakers = participants
-          .filter((p) => p.seatIndex !== null)
-          .map((p) => ({
-            id: p.userId,
-            name: p.userName,
-            avatar: p.userAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-            flag: p.userFlag || "🇮🇳",
-            isHost: p.role === "host",
-            isSpeaking: false,
-            isMuted: p.isMuted,
-            level: "Lv.10",
-            seatIndex: p.seatIndex,
-            role: p.role as "host" | "speaker" | "listener"
-          }));
-
         res.json({
           success: true,
           room: {
             id: r.id,
-            title: r.title,
-            description: r.description || "",
+            name: r.title,
             category: r.category,
-            badge: r.category === "Hindi" ? "HI-EN" : "EN",
-            hourlyRank: "Active ⭐",
-            hostId: r.hostId,
-            hostName: r.hostName,
-            hostAvatar: r.hostAvatar,
-            hostFlag: r.hostFlag,
-            listenerCount: Math.max(1, participants.length),
-            speakers,
-            tags: (r.tags as string[]) || ["#English Practice"],
-            pinnedMessage: r.pinnedMessage || `Welcome to ${r.title}!`
-          }
+            host: r.hostName,
+            initials: r.hostName.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "VR",
+            count: 1,
+            capacity: r.maxParticipants || 12,
+            access: (r.isPrivate ? "Private" : "Public") as "Public" | "Private",
+            approval: r.requireApproval || false,
+            allowMembers: true,
+            description: r.description || "Come in and join the conversation.",
+            color: "linear-gradient(135deg,#8b82ff,#56b5e9)",
+            live: true,
+            created: false,
+            createdAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
+          },
         });
         return;
       }
     } catch {
-      // Fallback to memory
+      // Ignored
     }
 
-    const memRoom = memoryRooms.get(roomId);
-    if (!memRoom) {
-      res.status(404).json({ success: false, error: "Room not found" });
-      return;
-    }
-    res.json({ success: true, room: memRoom });
+    res.status(404).json({ success: false, error: "Room not found" });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -238,84 +206,62 @@ router.get("/voicerooms/:id", async (req, res) => {
 router.post("/voicerooms", async (req, res) => {
   try {
     const {
+      name,
       title,
-      description,
-      category = "English",
-      tags = ["#English Practice"],
-      hostId = `user-${Date.now()}`,
-      hostName = "Student Host",
-      hostAvatar,
-      hostFlag = "🇮🇳",
-      pinnedMessage,
+      description = "",
+      category = "Language Practice",
+      capacity = 8,
+      access = "Public",
+      approval = false,
+      allowMembers = true,
+      host = "You",
+      initials = "YO",
+      color = "linear-gradient(135deg,#8b82ff,#56b5e9)",
     } = req.body;
 
-    if (!title || typeof title !== "string") {
-      res.status(400).json({ success: false, error: "Room title is required" });
+    const roomName = (name || title || "").trim();
+    if (!roomName || roomName.length < 3) {
+      res.status(400).json({ success: false, error: "Room name must be at least 3 characters." });
       return;
     }
 
     const roomId = `room-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const newRoom: InMemRoom = {
+    const newRoom: VoiceRoomData = {
       id: roomId,
-      title: title.trim(),
-      description: description || `Friendly ${category} speaking session`,
+      name: roomName,
       category,
-      badge: category === "Hindi" ? "HI-EN" : "EN",
-      hourlyRank: "New Stage ⭐",
-      hostId,
-      hostName,
-      hostAvatar: hostAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-      hostFlag,
-      listenerCount: 1,
-      tags: Array.isArray(tags) ? tags : [tags],
-      pinnedMessage: pinnedMessage || `Welcome to ${title.trim()}! Join stage to practice together.`,
+      host,
+      initials,
+      count: 1,
+      capacity: Number(capacity) || 8,
+      access: access === "Private" ? "Private" : "Public",
+      approval: Boolean(approval),
+      allowMembers: Boolean(allowMembers),
+      description: description.trim(),
+      color,
+      live: true,
+      created: true,
       createdAt: new Date().toISOString(),
-      speakers: [
-        {
-          id: hostId,
-          name: hostName,
-          avatar: hostAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-          flag: hostFlag,
-          isHost: true,
-          isSpeaking: false,
-          isMuted: false,
-          level: "Lv.12",
-          seatIndex: 0,
-          role: "host"
-        }
-      ]
     };
 
-    // Store in memory
     memoryRooms.set(roomId, newRoom);
 
     // Also attempt PostgreSQL save
     try {
       await db.insert(voiceRoomsTable).values({
         id: roomId,
-        title: newRoom.title,
+        title: roomName,
         description: newRoom.description,
         category: newRoom.category,
-        tags: newRoom.tags,
-        hostId,
-        hostName,
-        hostAvatar: newRoom.hostAvatar,
-        hostFlag: newRoom.hostFlag,
-        pinnedMessage: newRoom.pinnedMessage,
-      });
-
-      await db.insert(voiceRoomParticipantsTable).values({
-        roomId,
-        userId: hostId,
-        userName: hostName,
-        userAvatar: newRoom.hostAvatar,
-        userFlag: newRoom.hostFlag,
-        role: "host",
-        seatIndex: 0,
-        isMuted: false,
+        hostId: `user-${Date.now()}`,
+        hostName: host,
+        isPrivate: access === "Private",
+        requireApproval: Boolean(approval),
+        maxParticipants: Number(capacity) || 8,
+        status: "active",
       });
     } catch {
-      // Ignored if DB is not configured
+      // Ignored if DB is offline
     }
 
     res.status(201).json({ success: true, room: newRoom });
@@ -334,7 +280,6 @@ router.post("/voicerooms/:id/token", async (req, res) => {
     const apiSecret = process.env.LIVEKIT_API_SECRET;
     const livekitUrl = process.env.LIVEKIT_URL;
 
-    // Check if LiveKit credentials are configured in environment
     if (apiKey && apiSecret && livekitUrl) {
       const at = new AccessToken(apiKey, apiSecret, {
         identity: userId,
@@ -342,11 +287,10 @@ router.post("/voicerooms/:id/token", async (req, res) => {
         ttl: "3h",
       });
 
-      const canPublish = role === "host" || role === "speaker";
       at.addGrant({
         roomJoin: true,
         room: roomId,
-        canPublish,
+        canPublish: true,
         canPublishData: true,
         canSubscribe: true,
       });
@@ -361,7 +305,7 @@ router.post("/voicerooms/:id/token", async (req, res) => {
       return;
     }
 
-    // When LIVEKIT_URL is not provided, generate development fallback token
+    // Development fallback token
     const fallbackKey = "devkey";
     const fallbackSecret = "secret_key_12345678901234567890123456789012";
     const at = new AccessToken(fallbackKey, fallbackSecret, {
@@ -383,91 +327,8 @@ router.post("/voicerooms/:id/token", async (req, res) => {
       token: devToken,
       livekitUrl: livekitUrl || "",
       isConfigured: false,
-      message: "LiveKit cloud credentials not yet set in .env. Using client WebRTC fallback mode.",
+      message: "WebRTC audio engine ready.",
     });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 5. Join VoiceRoom Participant
-router.post("/voicerooms/:id/join", async (req, res) => {
-  try {
-    const roomId = req.params.id;
-    const { userId, userName, userAvatar, userFlag = "🇮🇳", role = "listener", seatIndex = null } = req.body;
-
-    if (!userId || !userName) {
-      res.status(400).json({ success: false, error: "userId and userName are required" });
-      return;
-    }
-
-    const room = memoryRooms.get(roomId);
-    if (room) {
-      room.listenerCount += 1;
-      if (seatIndex !== null) {
-        const existingIdx = room.speakers.findIndex((s) => s.id === userId);
-        const speakerEntry: InMemSpeaker = {
-          id: userId,
-          name: userName,
-          avatar: userAvatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-          flag: userFlag,
-          isHost: role === "host",
-          isSpeaking: false,
-          isMuted: false,
-          level: "Lv.10",
-          seatIndex,
-          role,
-        };
-        if (existingIdx >= 0) {
-          room.speakers[existingIdx] = speakerEntry;
-        } else {
-          room.speakers.push(speakerEntry);
-        }
-      }
-    }
-
-    try {
-      await db.insert(voiceRoomParticipantsTable).values({
-        roomId,
-        userId,
-        userName,
-        userAvatar,
-        userFlag,
-        role,
-        seatIndex,
-        isMuted: false,
-      });
-    } catch {
-      // Ignored if DB offline
-    }
-
-    res.json({ success: true, message: "Joined voice room successfully" });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// 6. Update Seat or Role (take stage, mute, step down)
-router.post("/voicerooms/:id/seat", async (req, res) => {
-  try {
-    const roomId = req.params.id;
-    const { userId, seatIndex, isMuted } = req.body;
-
-    const room = memoryRooms.get(roomId);
-    if (room) {
-      if (seatIndex === null) {
-        // Step down from stage
-        room.speakers = room.speakers.filter((s) => s.id !== userId);
-      } else {
-        const existing = room.speakers.find((s) => s.id === userId);
-        if (existing) {
-          existing.seatIndex = seatIndex;
-          if (typeof isMuted === "boolean") existing.isMuted = isMuted;
-        }
-      }
-    }
-
-    res.json({ success: true, message: "Seat updated" });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
