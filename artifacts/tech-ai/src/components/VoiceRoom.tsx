@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Room, RoomEvent, Track, RemoteTrack, createLocalAudioTrack, LocalAudioTrack } from 'livekit-client';
 import { io, Socket } from 'socket.io-client';
 
@@ -37,6 +37,7 @@ interface Participant {
   isSpeaking?: boolean;
   isMuted?: boolean;
   id?: string;
+  socketId?: string;
 }
 
 interface ChatMessage {
@@ -124,8 +125,46 @@ const DEFAULT_ROOMS: RoomItem[] = [
 ];
 
 export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: VoiceRoomProps) {
+  // Stable unique user identity for this session so Host and Friends never conflict
+  const [effectiveUserId] = useState(() => {
+    let id = sessionStorage.getItem('techai-vr-uid');
+    if (!id) {
+      id = `user-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+      sessionStorage.setItem('techai-vr-uid', id);
+    }
+    return id;
+  });
+
+  const effectiveUserName = useMemo(() => {
+    if (userName && userName !== 'Guest student' && userName !== 'Student') return userName;
+    let saved = sessionStorage.getItem('techai-vr-uname');
+    if (!saved) {
+      saved = `Student ${Math.floor(100 + Math.random() * 900)}`;
+      sessionStorage.setItem('techai-vr-uname', saved);
+    }
+    return saved;
+  }, [userName]);
+
   const [activeFilter, setActiveFilter] = useState<string>('All');
-  const [currentRoom, setCurrentRoom] = useState<RoomItem | null>(null);
+  const [currentRoom, setCurrentRoom] = useState<RoomItem | null>(() => {
+    try {
+      const saved = localStorage.getItem('techai-active-voiceroom');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.id) return parsed;
+      }
+    } catch {}
+    return null;
+  });
+  const currentRoomRef = useRef<RoomItem | null>(currentRoom);
+  useEffect(() => {
+    currentRoomRef.current = currentRoom;
+  }, [currentRoom]);
+
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const lastSpeakingRef = useRef<boolean>(false);
+
   const [rooms, setRooms] = useState<RoomItem[]>(DEFAULT_ROOMS);
   const [micEnabled, setMicEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -187,7 +226,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   };
 
   // Check if current user is host
-  const isHost = currentRoom?.host === userName || currentRoom?.created === true;
+  const isHost = currentRoom?.host === effectiveUserName || currentRoom?.host === userName || currentRoom?.created === true;
 
   // Fetch rooms from backend
   const fetchRooms = useCallback(async () => {
@@ -217,6 +256,19 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
   // Clean up all audio streams
   const stopAudio = useCallback(() => {
+    peerConnectionsRef.current.forEach((pc) => {
+      try { pc.close(); } catch {}
+    });
+    peerConnectionsRef.current.clear();
+
+    remoteAudioElementsRef.current.forEach((audio) => {
+      try {
+        audio.srcObject = null;
+        audio.remove();
+      } catch {}
+    });
+    remoteAudioElementsRef.current.clear();
+
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
@@ -291,10 +343,22 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
         setIsSpeaking(speaking);
 
+        if (speaking !== lastSpeakingRef.current) {
+          lastSpeakingRef.current = speaking;
+          if (socketRef.current && currentRoomRef.current) {
+            socketRef.current.emit('speakingState', {
+              roomId: currentRoomRef.current.id,
+              userId: effectiveUserId,
+              userName: effectiveUserName,
+              isSpeaking: speaking,
+            });
+          }
+        }
+
         // Broadcast to other peers/tabs
         broadcastChannelRef.current?.postMessage({
           type: 'SPEAKING_UPDATE',
-          userName,
+          userName: effectiveUserName,
           isSpeaking: speaking
         });
 
@@ -305,6 +369,66 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       console.warn('AudioAnalyser setup failed:', e);
     }
   };
+
+  // Create or retrieve an RTCPeerConnection for a peer
+  const createPeerConnection = useCallback((targetSocketId: string) => {
+    if (peerConnectionsRef.current.has(targetSocketId)) {
+      return peerConnectionsRef.current.get(targetSocketId)!;
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+      ],
+    });
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getAudioTracks().forEach(track => {
+        pc.addTrack(track, mediaStreamRef.current!);
+      });
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socketRef.current) {
+        socketRef.current.emit('webrtcSignal', {
+          roomId: currentRoomRef.current?.id,
+          toSocketId: targetSocketId,
+          signal: { type: 'candidate', candidate: event.candidate },
+          fromUserId: effectiveUserId,
+          fromUserName: effectiveUserName,
+        });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      let audio = remoteAudioElementsRef.current.get(targetSocketId);
+      if (!audio) {
+        audio = new Audio();
+        audio.autoplay = true;
+        remoteAudioElementsRef.current.set(targetSocketId, audio);
+        audioContainerRef.current?.appendChild(audio);
+      }
+      audio.srcObject = event.streams[0];
+      audio.play().catch(e => console.warn('P2P audio play policy:', e));
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        const audio = remoteAudioElementsRef.current.get(targetSocketId);
+        if (audio) {
+          audio.srcObject = null;
+          audio.remove();
+          remoteAudioElementsRef.current.delete(targetSocketId);
+        }
+        peerConnectionsRef.current.delete(targetSocketId);
+      }
+    };
+
+    peerConnectionsRef.current.set(targetSocketId, pc);
+    return pc;
+  }, [effectiveUserId, effectiveUserName]);
 
   // Enable Microphone explicitly
   const enableMicrophone = async () => {
@@ -324,6 +448,19 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       });
       mediaStreamRef.current = stream;
       setupVoiceDetection(stream);
+
+      // Attach track to all existing P2P peer connections
+      peerConnectionsRef.current.forEach((pc) => {
+        stream.getAudioTracks().forEach(track => {
+          const senders = pc.getSenders();
+          const audioSender = senders.find(s => s.track?.kind === 'audio');
+          if (audioSender) {
+            audioSender.replaceTrack(track);
+          } else {
+            pc.addTrack(track, stream);
+          }
+        });
+      });
 
       if (livekitRoomRef.current) {
         try {
@@ -369,6 +506,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       }
       setMicEnabled(false);
       setIsSpeaking(false);
+      if (socketRef.current && currentRoomRef.current) {
+        socketRef.current.emit('speakingState', {
+          roomId: currentRoomRef.current.id,
+          userId: effectiveUserId,
+          userName: effectiveUserName,
+          isSpeaking: false,
+        });
+      }
       showToast('Microphone muted.');
     } else {
       await enableMicrophone();
@@ -426,24 +571,208 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
   // Connect Socket.IO
   const connectSocket = useCallback((roomId: string) => {
+    // Disconnect any old socket first
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+
     try {
       const socket = io('/', {
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: 5,
+        reconnectionAttempts: 10,
         reconnectionDelay: 1000,
       });
       socketRef.current = socket;
 
       socket.on('connect', () => {
+        // Join with stable effectiveUserId so both tabs can identify each other
         socket.emit('joinRoom', {
           roomId,
-          userName,
-          userId: `user-${Date.now()}`,
+          userName: effectiveUserName,
+          userId: effectiveUserId,
         });
       });
 
+      // Server sends us the list of everyone ALREADY in the room when we first join
+      socket.on('roomParticipantsList', (data: any) => {
+        if (!data || !Array.isArray(data.participants)) return;
+        const newPeers: Participant[] = data.participants
+          .filter((p: any) => p.userId !== effectiveUserId)
+          .map((p: any) => ({
+            name: p.userName || 'Student',
+            initials: (p.userName || 'UN').slice(0, 2).toUpperCase(),
+            role: 'Listening',
+            color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+            isSpeaking: p.isSpeaking || false,
+            isMuted: p.isMuted || false,
+            id: p.userId,
+            socketId: p.socketId,
+          }));
+
+        setPeerParticipants(prev => {
+          // Merge: keep existing peers, add new ones from server list
+          const merged = [...prev];
+          newPeers.forEach(np => {
+            if (!merged.some(p => p.id === np.id)) {
+              merged.push(np);
+            }
+          });
+          return merged;
+        });
+
+        // Initiate P2P WebRTC offer to each existing member so audio flows
+        data.participants
+          .filter((p: any) => p.userId !== effectiveUserId && p.socketId)
+          .forEach(async (p: any) => {
+            try {
+              const pc = createPeerConnection(p.socketId);
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              socket.emit('webrtcSignal', {
+                roomId,
+                toSocketId: p.socketId,
+                signal: { type: 'offer', sdp: offer.sdp },
+                fromUserId: effectiveUserId,
+                fromUserName: effectiveUserName,
+              });
+            } catch (e) {
+              console.warn('P2P offer creation failed:', e);
+            }
+          });
+      });
+
+      // A new participant joined while we were on stage
+      socket.on('participantJoined', (data: any) => {
+        const name = data.userName || data.name || 'Someone';
+        // Don't show our own join event
+        if (data.userId === effectiveUserId) return;
+
+        setChatMessages(prev => [...prev, {
+          id: `sys-${Date.now()}`,
+          sender: 'System',
+          senderInitials: '',
+          content: `${name} joined the room 👋`,
+          timestamp: new Date().toISOString(),
+          isSystem: true,
+        }]);
+
+        setPeerParticipants(prev => {
+          if (prev.some(p => p.id === data.userId || p.name === data.userName)) return prev;
+          return [...prev, {
+            name: data.userName,
+            initials: (data.userName || 'UN').slice(0, 2).toUpperCase(),
+            role: 'Listening',
+            color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+            isSpeaking: false,
+            isMuted: false,
+            id: data.userId,
+            socketId: data.socketId,
+          }];
+        });
+
+        // Existing member: send offer to newly joined peer
+        if (data.socketId && mediaStreamRef.current) {
+          (async () => {
+            try {
+              const pc = createPeerConnection(data.socketId);
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              socket.emit('webrtcSignal', {
+                roomId,
+                toSocketId: data.socketId,
+                signal: { type: 'offer', sdp: offer.sdp },
+                fromUserId: effectiveUserId,
+                fromUserName: effectiveUserName,
+              });
+            } catch (e) {
+              console.warn('P2P offer to new peer failed:', e);
+            }
+          })();
+        }
+      });
+
+      // WebRTC signaling handler
+      socket.on('webrtcSignal', async (data: any) => {
+        const { fromSocketId, signal, fromUserId, fromUserName: fromName } = data || {};
+        if (!fromSocketId || !signal) return;
+
+        try {
+          const pc = createPeerConnection(fromSocketId);
+
+          if (signal.type === 'offer') {
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit('webrtcSignal', {
+              roomId,
+              toSocketId: fromSocketId,
+              signal: { type: 'answer', sdp: answer.sdp },
+              fromUserId: effectiveUserId,
+              fromUserName: effectiveUserName,
+            });
+
+            // Add peer to participants if not already there
+            if (fromUserId && fromUserId !== effectiveUserId) {
+              setPeerParticipants(prev => {
+                if (prev.some(p => p.id === fromUserId)) return prev;
+                return [...prev, {
+                  name: fromName || 'Student',
+                  initials: (fromName || 'UN').slice(0, 2).toUpperCase(),
+                  role: 'Speaking',
+                  color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+                  isSpeaking: false,
+                  isMuted: false,
+                  id: fromUserId,
+                  socketId: fromSocketId,
+                }];
+              });
+            }
+          } else if (signal.type === 'answer') {
+            if (pc.signalingState !== 'have-local-offer') return;
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
+          } else if (signal.type === 'candidate' && signal.candidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          }
+        } catch (e) {
+          console.warn('WebRTC signaling error:', e);
+        }
+      });
+
+      socket.on('peerSpeaking', (data: any) => {
+        setPeerParticipants(prev =>
+          prev.map(p => (p.id === data.userId || p.name === data.userName)
+            ? { ...p, isSpeaking: Boolean(data.isSpeaking), isMuted: !data.isSpeaking && p.isMuted }
+            : p
+          )
+        );
+      });
+
+      socket.on('participantLeft', (data: any) => {
+        const name = data.userName || data.name || 'Someone';
+        if (data.userId === effectiveUserId) return;
+        setChatMessages(prev => [...prev, {
+          id: `sys-${Date.now()}`,
+          sender: 'System',
+          senderInitials: '',
+          content: `${name} left the room`,
+          timestamp: new Date().toISOString(),
+          isSystem: true,
+        }]);
+        setPeerParticipants(prev => prev.filter(p => p.id !== data.userId && p.name !== data.userName));
+
+        // Clean up P2P connection
+        if (data.socketId) {
+          const pc = peerConnectionsRef.current.get(data.socketId);
+          if (pc) { try { pc.close(); } catch {} peerConnectionsRef.current.delete(data.socketId); }
+          const audio = remoteAudioElementsRef.current.get(data.socketId);
+          if (audio) { audio.srcObject = null; audio.remove(); remoteAudioElementsRef.current.delete(data.socketId); }
+        }
+      });
+
       socket.on('chatMessage', (msg: any) => {
+        if (msg.userId === effectiveUserId) return; // Don't duplicate own messages
         const chatMsg: ChatMessage = {
           id: msg.id || `msg-${Date.now()}-${Math.random()}`,
           sender: msg.sender || msg.userName || 'Unknown',
@@ -455,71 +784,41 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         setChatMessages(prev => [...prev, chatMsg]);
       });
 
-      socket.on('participantJoined', (data: any) => {
-        const name = data.userName || data.name || 'Someone';
-        setChatMessages(prev => [...prev, {
-          id: `sys-${Date.now()}`,
-          sender: 'System',
-          senderInitials: '',
-          content: `${name} joined the room`,
-          timestamp: new Date().toISOString(),
-          isSystem: true,
-        }]);
-        if (data.userName && data.userName !== userName) {
-          setPeerParticipants(prev => {
-            if (prev.some(p => p.name === data.userName)) return prev;
-            return [...prev, {
-              name: data.userName,
-              initials: (data.userName || 'UN').slice(0, 2).toUpperCase(),
-              role: 'Listening',
-              color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
-              isSpeaking: false,
-              isMuted: true,
-              id: data.userId,
-            }];
-          });
-        }
-      });
-
-      socket.on('participantLeft', (data: any) => {
-        const name = data.userName || data.name || 'Someone';
-        setChatMessages(prev => [...prev, {
-          id: `sys-${Date.now()}`,
-          sender: 'System',
-          senderInitials: '',
-          content: `${name} left the room`,
-          timestamp: new Date().toISOString(),
-          isSystem: true,
-        }]);
-        setPeerParticipants(prev => prev.filter(p => p.name !== data.userName));
-      });
-
       socket.on('roomUpdated', (data: any) => {
         if (data.locked !== undefined) setRoomLocked(data.locked);
         if (data.chatEnabled !== undefined) setChatEnabled(data.chatEnabled);
-        if (data.capacity !== undefined && currentRoom) {
+        if (data.capacity !== undefined) {
           setCurrentRoom(prev => prev ? { ...prev, capacity: data.capacity } : null);
         }
       });
 
+      socket.on('roomClosed', () => {
+        showToast('The host closed this room.');
+        leaveRoom();
+      });
+
       socket.on('participantMuted', (data: any) => {
-        if (data.userName === userName) {
+        if (data.userId === effectiveUserId || data.userName === effectiveUserName) {
+          mediaStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
           setMicEnabled(false);
           setIsSpeaking(false);
-          showToast('You were muted by the host.');
+          showToast('🔇 You were muted by the host.');
         }
         setPeerParticipants(prev =>
-          prev.map(p => p.name === data.userName ? { ...p, isMuted: true, isSpeaking: false } : p)
+          prev.map(p => (p.id === data.userId || p.name === data.userName)
+            ? { ...p, isMuted: true, isSpeaking: false }
+            : p
+          )
         );
       });
 
       socket.on('participantRemoved', (data: any) => {
-        if (data.userName === userName) {
+        if (data.userId === effectiveUserId || data.userName === effectiveUserName) {
           showToast('You were removed from the room by the host.');
           leaveRoom();
           return;
         }
-        setPeerParticipants(prev => prev.filter(p => p.name !== data.userName));
+        setPeerParticipants(prev => prev.filter(p => p.id !== data.userId && p.name !== data.userName));
       });
 
       socket.on('disconnect', () => {
@@ -528,16 +827,16 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
       socket.on('reconnect', () => {
         setConnectionStatus('connected');
-        socket.emit('joinRoom', { roomId, userName });
+        socket.emit('joinRoom', { roomId, userName: effectiveUserName, userId: effectiveUserId });
       });
 
       socket.on('connect_error', () => {
-        // Socket connection failed - non-critical, chat will be unavailable
+        // Socket.IO not available — voice still works via LiveKit
       });
     } catch {
       // Socket.IO not available
     }
-  }, [userName]);
+  }, [effectiveUserId, effectiveUserName, createPeerConnection]);
 
   // Send chat message
   const sendChatMessage = () => {
@@ -555,15 +854,18 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
     const chatMsg: ChatMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      sender: userName,
-      senderInitials: (userName || 'YO').slice(0, 2).toUpperCase(),
+      sender: effectiveUserName,
+      senderInitials: (effectiveUserName || 'YO').slice(0, 2).toUpperCase(),
       content: msg,
       timestamp: new Date().toISOString(),
     };
 
     socketRef.current.emit('chatMessage', {
       roomId: currentRoom.id,
+      userId: effectiveUserId,
+      userName: effectiveUserName,
       ...chatMsg,
+      sender: effectiveUserName,
     });
 
     setChatMessages(prev => [...prev, chatMsg]);
@@ -635,6 +937,11 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     setRoomLocked(room.locked || false);
     setChatEnabled(room.chatEnabled !== false);
 
+    // Persist active room so host stays in room if they open WhatsApp / share link
+    try {
+      localStorage.setItem('techai-active-voiceroom', JSON.stringify(room));
+    } catch {}
+
     // Sync room ID directly to the browser URL so it is persistent & easily shareable
     try {
       const url = new URL(window.location.href);
@@ -651,11 +958,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
     // Broadcast channel for multi-tab sync
     try {
+      if (broadcastChannelRef.current) {
+        try { broadcastChannelRef.current.close(); } catch {}
+      }
       const bc = new BroadcastChannel(`voiceroom_${room.id}`);
       broadcastChannelRef.current = bc;
       bc.onmessage = (event) => {
         const { type, userName: senderName, isSpeaking: peerSpeaking } = event.data || {};
-        if (type === 'SPEAKING_UPDATE' && senderName && senderName !== userName) {
+        if (type === 'SPEAKING_UPDATE' && senderName && senderName !== effectiveUserName) {
           setPeerParticipants(prev => {
             const exists = prev.find(p => p.name === senderName);
             if (exists) {
@@ -681,7 +991,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const res = await fetch(`/api/voicerooms/${room.id}/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: `user-${Date.now()}`, userName, role: 'listener' }),
+        body: JSON.stringify({ userId: effectiveUserId, userName: effectiveUserName, role: 'publisher' }),
       });
 
       if (res.ok) {
@@ -717,6 +1027,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           livekitRoomRef.current = lkRoom;
           setConnectionStatus('connected');
         } else {
+          // LiveKit not configured — use P2P WebRTC via Socket.IO signals
           setConnectionStatus('connected');
         }
       } else {
@@ -731,11 +1042,11 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     if (autoEnableMic) {
       setTimeout(() => {
         enableMicrophone();
-      }, 350);
+      }, 600);
     }
 
     onProgress?.('lesson', 'Voice Room Conversation', `Joined "${room.name}" voice room`);
-    showToast(`Joined ${room.name}`);
+    showToast(`✅ Joined ${room.name} — you're on stage!`);
   };
 
   // Auto-join from URL hash or query params
@@ -746,7 +1057,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const queryParams = new URLSearchParams(window.location.search);
       const targetId = hashParams.get('room') || queryParams.get('room') || queryParams.get('voiceroom');
 
-      if (targetId && !currentRoom) {
+      if (targetId && !currentRoomRef.current) {
         let roomToJoin = rooms.find(r => r.id === targetId || r.name.toLowerCase() === targetId.toLowerCase());
 
         // If not in local rooms state (e.g. fresh page load via WhatsApp link), query API
@@ -774,7 +1085,37 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       }
     };
 
-    checkUrl();
+    // If we have an active room stored from before (host returning after sharing WhatsApp), restore it
+    const restoreSaved = async () => {
+      if (currentRoomRef.current) return; // Already in a room
+      const queryParams = new URLSearchParams(window.location.search);
+      const hasRoomInUrl = queryParams.get('room') || queryParams.get('voiceroom');
+      if (hasRoomInUrl) return; // URL already has room — checkUrl will handle it
+
+      try {
+        const saved = localStorage.getItem('techai-active-voiceroom');
+        if (saved) {
+          const savedRoom = JSON.parse(saved);
+          if (savedRoom && savedRoom.id && isMounted) {
+            // Verify the room still exists on the backend
+            const res = await fetch(`/api/voicerooms/${encodeURIComponent(savedRoom.id)}`);
+            if (res.ok && isMounted) {
+              const data = await res.json();
+              if (data.success && data.room) {
+                openRoom({ ...savedRoom, ...data.room, created: savedRoom.created }, false);
+                return;
+              }
+            }
+            // If backend doesn't know the room, still re-enter (works if server restarted)
+            if (isMounted) {
+              openRoom(savedRoom, false);
+            }
+          }
+        }
+      } catch {}
+    };
+
+    checkUrl().then(() => restoreSaved());
     window.addEventListener('hashchange', checkUrl);
     window.addEventListener('popstate', checkUrl);
     return () => {
@@ -782,17 +1123,25 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       window.removeEventListener('hashchange', checkUrl);
       window.removeEventListener('popstate', checkUrl);
     };
-  }, [rooms, currentRoom]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rooms]);
 
   // Leave room
   const leaveRoom = () => {
-    if (socketRef.current && currentRoom) {
-      socketRef.current.emit('leaveRoom', { roomId: currentRoom.id, userName });
+    if (socketRef.current && currentRoomRef.current) {
+      socketRef.current.emit('leaveRoom', {
+        roomId: currentRoomRef.current.id,
+        userId: effectiveUserId,
+        userName: effectiveUserName,
+      });
     }
     stopAudio();
     disconnectSocket();
     setCurrentRoom(null);
     setPeerParticipants([]);
+
+    // Clear persisted room so host doesn't re-enter after intentional leave
+    try { localStorage.removeItem('techai-active-voiceroom'); } catch {}
 
     // Clear room query from URL
     try {
@@ -824,8 +1173,8 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       id: newRoomId,
       name,
       category: formCategory,
-      host: userName || 'You',
-      initials: (userName || 'YO').slice(0, 2).toUpperCase(),
+      host: effectiveUserName,
+      initials: effectiveUserName.slice(0, 2).toUpperCase(),
       count: 1,
       capacity: Number(formCapacity) || 8,
       access: formAccess,
@@ -843,7 +1192,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const res = await fetch('/api/voicerooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newRoom),
+        body: JSON.stringify({ ...newRoom, hostId: effectiveUserId }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -859,7 +1208,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     setFormDesc('');
     setActiveFilter('All');
     openRoom(roomToOpen, true);
-    showToast('🎉 Room created and live! You are on stage with mic active. Invite friends now!');
+    showToast('🎉 Room created! You are on stage. Invite friends now!');
   };
 
   // Join by link form handler
@@ -921,7 +1270,8 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     const url = getInviteUrl();
     try {
       await navigator.clipboard.writeText(url);
-      showToast('Invitation link copied!');
+      setInviteModalOpen(false);
+      showToast('✅ Invitation link copied! You stay on stage — share it with your friends.');
     } catch {
       showToast(`Copy link: ${url}`);
     }
@@ -930,8 +1280,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const shareOnWhatsApp = () => {
     const msg = getInviteMessage();
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    // Close invite modal FIRST so host stays on stage view
+    setInviteModalOpen(false);
+    // Persist room to localStorage so host can be restored if page unloads on mobile
+    if (currentRoomRef.current) {
+      try { localStorage.setItem('techai-active-voiceroom', JSON.stringify(currentRoomRef.current)); } catch {}
+    }
     window.open(waUrl, '_blank', 'noopener,noreferrer');
-    showToast('Opening WhatsApp with pre-filled invitation...');
+    showToast('🎙️ You stay on stage! WhatsApp opened — share with friends.');
   };
 
   const shareNative = async () => {
@@ -1213,11 +1569,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
             <button
               type="button"
               className="vr-backlink"
-              onClick={() => {
-                setCurrentRoom(null);
-                stopAudio();
-                disconnectSocket();
-              }}
+              onClick={leaveRoom}
             >
               ← Back to explore
             </button>
@@ -1256,17 +1608,19 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                 <div>
                   {/* Participants Grid */}
                   <div className="vr-participants">
-                    {/* 1. Host Card */}
-                    <div className="vr-person">
-                      <div
-                        className="vr-personpic"
-                        style={{ background: currentRoom.color || 'linear-gradient(135deg,#9d8aff,#58b9ee)' }}
-                      >
-                        {currentRoom.initials || 'VR'}
+                    {/* 1. Host Card — show separately only if I am NOT the host */}
+                    {!isHost && (
+                      <div className="vr-person">
+                        <div
+                          className="vr-personpic"
+                          style={{ background: currentRoom.color || 'linear-gradient(135deg,#9d8aff,#58b9ee)' }}
+                        >
+                          {currentRoom.initials || 'VR'}
+                        </div>
+                        <strong>{currentRoom.host} ✦</strong>
+                        <small>Host</small>
                       </div>
-                      <strong>{currentRoom.host} ✦</strong>
-                      <small>Host</small>
-                    </div>
+                    )}
 
                     {/* 2. You (User) Card with Real Speaking Detection Ring */}
                     <div className={`vr-person ${micEnabled && isSpeaking ? 'speaking' : ''}`}>
@@ -1274,18 +1628,18 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                         className="vr-personpic"
                         style={{ background: 'linear-gradient(135deg,#74d6c8,#5488ff)' }}
                       >
-                        {(userName || 'YO').slice(0, 2).toUpperCase()}
+                        {effectiveUserName.slice(0, 2).toUpperCase()}
                       </div>
-                      <strong>{userName} (You)</strong>
+                      <strong>{effectiveUserName} {isHost ? '✦' : ''} (You)</strong>
                       <small>
-                        {micEnabled ? (isSpeaking ? 'Speaking 🎙️' : 'Mic enabled') : 'Listening'}
+                        {isHost ? 'Host · ' : ''}{micEnabled ? (isSpeaking ? 'Speaking 🎙️' : 'Mic enabled') : '🎤 Tap to unmute'}
                       </small>
                     </div>
 
                     {/* 3. Connected Peers */}
                     {peerParticipants.map((p, idx) => (
-                      <div key={idx} className={`vr-person ${p.isSpeaking ? 'speaking' : ''}`}>
-                        <div className="vr-personpic" style={{ background: p.color }}>
+                      <div key={p.id || idx} className={`vr-person ${p.isSpeaking ? 'speaking' : ''}`}>
+                        <div className="vr-personpic" style={{ background: p.color || 'linear-gradient(135deg,#74d6c8,#5488ff)' }}>
                           {p.initials}
                         </div>
                         <strong>{p.name}</strong>
