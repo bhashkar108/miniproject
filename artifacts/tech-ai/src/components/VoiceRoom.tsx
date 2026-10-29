@@ -306,6 +306,52 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
   };
 
+  // Enable Microphone explicitly
+  const enableMicrophone = async () => {
+    try {
+      if (mediaStreamRef.current && mediaStreamRef.current.active) {
+        mediaStreamRef.current.getAudioTracks().forEach(t => { t.enabled = true; });
+        if (localAudioTrackRef.current) localAudioTrackRef.current.unmute();
+        if (livekitRoomRef.current) {
+          try { await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(true); } catch {}
+        }
+        setMicEnabled(true);
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      mediaStreamRef.current = stream;
+      setupVoiceDetection(stream);
+
+      if (livekitRoomRef.current) {
+        try {
+          if (!localAudioTrackRef.current) {
+            const lkTrack = await createLocalAudioTrack({
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            });
+            localAudioTrackRef.current = lkTrack;
+            await livekitRoomRef.current.localParticipant.publishTrack(lkTrack);
+          } else {
+            localAudioTrackRef.current.unmute();
+            await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(true);
+          }
+        } catch (lkErr) {
+          console.warn('LiveKit track publish:', lkErr);
+        }
+      }
+
+      setMicEnabled(true);
+      showToast('🎙 Microphone active! Speak freely with everyone on stage.');
+    } catch (err: any) {
+      setConnectionStatus('mic-denied');
+      showToast('Microphone access is required. Please check your browser permissions.');
+    }
+  };
+
   // Toggle Microphone
   const toggleMicrophone = async () => {
     if (micEnabled) {
@@ -325,40 +371,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       setIsSpeaking(false);
       showToast('Microphone muted.');
     } else {
-      // Unmute / Enable mic
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-        });
-        mediaStreamRef.current = stream;
-        setupVoiceDetection(stream);
-
-        // If connected to LiveKit cloud, publish track
-        if (livekitRoomRef.current) {
-          try {
-            if (!localAudioTrackRef.current) {
-              const lkTrack = await createLocalAudioTrack({
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-              });
-              localAudioTrackRef.current = lkTrack;
-              await livekitRoomRef.current.localParticipant.publishTrack(lkTrack);
-            } else {
-              localAudioTrackRef.current.unmute();
-              await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(true);
-            }
-          } catch (lkErr) {
-            console.warn('LiveKit track publish:', lkErr);
-          }
-        }
-
-        setMicEnabled(true);
-        showToast('Microphone enabled! Speak freely with everyone in the room.');
-      } catch (err: any) {
-        setConnectionStatus('mic-denied');
-        showToast('Microphone access is required. Please check your browser permissions.');
-      }
+      await enableMicrophone();
     }
   };
 
@@ -606,7 +619,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   };
 
   // Open a room
-  const openRoom = async (room: RoomItem) => {
+  const openRoom = async (room: RoomItem, autoEnableMic: boolean = false) => {
     if (room.count >= room.capacity) {
       setConnectionStatus('room-full');
       showToast('This room is currently full.');
@@ -622,10 +635,18 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     setRoomLocked(room.locked || false);
     setChatEnabled(room.chatEnabled !== false);
 
+    // Sync room ID directly to the browser URL so it is persistent & easily shareable
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('module', 'voiceroom');
+      url.searchParams.set('room', room.id);
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+
     // Load chat history
     loadChatHistory(room.id);
 
-    // Connect Socket.IO for real-time chat
+    // Connect Socket.IO for real-time chat & stage coordination
     connectSocket(room.id);
 
     // Broadcast channel for multi-tab sync
@@ -706,6 +727,13 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       setConnectionStatus('connected');
     }
 
+    // If autoEnableMic requested (e.g. host creating room or friend joining stage via invite)
+    if (autoEnableMic) {
+      setTimeout(() => {
+        enableMicrophone();
+      }, 350);
+    }
+
     onProgress?.('lesson', 'Voice Room Conversation', `Joined "${room.name}" voice room`);
     showToast(`Joined ${room.name}`);
   };
@@ -719,36 +747,40 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const targetId = hashParams.get('room') || queryParams.get('room') || queryParams.get('voiceroom');
 
       if (targetId && !currentRoom) {
-        const found = rooms.find(r => r.id === targetId);
-        if (found) {
-          openRoom(found);
-          return;
-        }
+        let roomToJoin = rooms.find(r => r.id === targetId || r.name.toLowerCase() === targetId.toLowerCase());
 
         // If not in local rooms state (e.g. fresh page load via WhatsApp link), query API
-        try {
-          const res = await fetch(`/api/voicerooms/${encodeURIComponent(targetId)}`);
-          if (res.ok && isMounted) {
-            const data = await res.json();
-            if (data.success && data.room) {
-              setRooms(prev => {
-                if (prev.some(r => r.id === data.room.id)) return prev;
-                return [data.room, ...prev];
-              });
-              openRoom(data.room);
+        if (!roomToJoin) {
+          try {
+            const res = await fetch(`/api/voicerooms/${encodeURIComponent(targetId)}`);
+            if (res.ok && isMounted) {
+              const data = await res.json();
+              if (data.success && data.room) {
+                roomToJoin = data.room;
+                setRooms(prev => {
+                  if (prev.some(r => r.id === data.room.id)) return prev;
+                  return [data.room, ...prev];
+                });
+              }
             }
+          } catch {
+            // Room lookup failed
           }
-        } catch {
-          // Room lookup failed
+        }
+
+        if (roomToJoin && isMounted) {
+          openRoom(roomToJoin, true);
         }
       }
     };
 
     checkUrl();
     window.addEventListener('hashchange', checkUrl);
+    window.addEventListener('popstate', checkUrl);
     return () => {
       isMounted = false;
       window.removeEventListener('hashchange', checkUrl);
+      window.removeEventListener('popstate', checkUrl);
     };
   }, [rooms, currentRoom]);
 
@@ -761,6 +793,15 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     disconnectSocket();
     setCurrentRoom(null);
     setPeerParticipants([]);
+
+    // Clear room query from URL
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('room');
+      url.searchParams.delete('voiceroom');
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+
     showToast('You left the room.');
   };
 
@@ -778,8 +819,9 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       return;
     }
 
+    const newRoomId = `room-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const newRoom: RoomItem = {
-      id: `room-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: newRoomId,
       name,
       category: formCategory,
       host: userName || 'You',
@@ -795,22 +837,29 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       created: true,
     };
 
-    // Save to backend
+    // Save to backend and retrieve persistent room
+    let roomToOpen = newRoom;
     try {
-      await fetch('/api/voicerooms', {
+      const res = await fetch('/api/voicerooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRoom),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.room) {
+          roomToOpen = { ...newRoom, ...data.room, created: true };
+        }
+      }
     } catch {}
 
-    setRooms(prev => [newRoom, ...prev]);
+    setRooms(prev => [roomToOpen, ...prev.filter(r => r.id !== roomToOpen.id)]);
     setCreateModalOpen(false);
     setFormName('');
     setFormDesc('');
     setActiveFilter('All');
-    openRoom(newRoom);
-    showToast('Room created and live! Invite your friends to talk together.');
+    openRoom(roomToOpen, true);
+    showToast('🎉 Room created and live! You are on stage with mic active. Invite friends now!');
   };
 
   // Join by link form handler

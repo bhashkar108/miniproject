@@ -58,6 +58,11 @@ export default defineConfig({
         target: process.env.API_SERVER_URL || 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
+      '/socket.io': {
+        target: process.env.API_SERVER_URL || 'http://127.0.0.1:5000',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
   preview: {
@@ -67,6 +72,11 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: process.env.API_SERVER_URL || 'http://127.0.0.1:5000',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: process.env.API_SERVER_URL || 'http://127.0.0.1:5000',
+        ws: true,
         changeOrigin: true,
       },
     },

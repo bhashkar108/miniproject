@@ -330,12 +330,30 @@ function AppContent() {
   const [module, setModule] = useState<Module>(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
+      const h = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const mod = p.get('module');
       if (mod === 'voiceroom' || mod === 'voice' || mod === 'teacher') return mod as Module;
-      if (p.get('room') || p.get('voiceroom')) return 'voiceroom';
+      if (p.get('room') || p.get('voiceroom') || h.get('room') || h.get('voiceroom')) return 'voiceroom';
     }
     return 'home';
   });
+
+  // Keep module in sync when user navigates or opens shared links
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const p = new URLSearchParams(window.location.search);
+      const h = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      if (p.get('room') || p.get('voiceroom') || h.get('room') || h.get('voiceroom') || p.get('module') === 'voiceroom') {
+        setModule('voiceroom');
+      }
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
   const [theme, setTheme] = useState(() => localStorage.getItem('techai-theme') || 'light');
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>(() => {
     const saved=localStorage.getItem('techai-language');

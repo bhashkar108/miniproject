@@ -293,6 +293,7 @@ router.get("/voicerooms/:id", async (req, res) => {
 router.post("/voicerooms", async (req, res) => {
   try {
     const {
+      id: providedId,
       name,
       title,
       description = "",
@@ -317,7 +318,7 @@ router.post("/voicerooms", async (req, res) => {
       return;
     }
 
-    const roomId = `room-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const roomId = providedId || `room-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const hostId = providedHostId || `user-${Date.now()}`;
     const newRoom: VoiceRoomData = {
       id: roomId,
