@@ -79,6 +79,7 @@
     "livekit-client": "^2.23.0",
     "mathjs": "^15.2.0",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^6.4.299"
+    "pdfjs-dist": "^6.4.299",
+    "socket.io-client": "^4.8.4"
   }
 }

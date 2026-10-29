@@ -6411,4 +6411,314 @@
   .vr-topright .vr-smallbtn { display: none; }
 }
 
+/* ========================================================
+   VOICEROOM CHAT, HOST CONTROLS & REAL-TIME STAGE STYLES
+   ======================================================== */
+.vr-roomview-layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .vr-roomview-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vr-chat-panel {
+  background: rgba(15, 17, 40, 0.75);
+  border: 1px solid rgba(139, 130, 255, 0.18);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  height: 540px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+}
+.vr-chat-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(139, 130, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(25, 28, 60, 0.4);
+}
+.vr-chat-header h3 {
+  color: #e2e0ff;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+}
+.vr-chat-header .vr-chat-count {
+  font-size: 12px;
+  color: rgba(160, 155, 220, 0.7);
+  background: rgba(139, 130, 255, 0.12);
+  padding: 3px 8px;
+  border-radius: 10px;
+}
+
+.vr-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+}
+.vr-chat-messages::-webkit-scrollbar {
+  width: 5px;
+}
+.vr-chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+.vr-chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(139, 130, 255, 0.25);
+  border-radius: 10px;
+}
+
+.vr-chat-msg {
+  max-width: 88%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.vr-chat-msg.own {
+  align-self: flex-end;
+}
+.vr-chat-msg.other {
+  align-self: flex-start;
+}
+
+.vr-chat-msg .msg-sender {
+  font-size: 11px;
+  color: rgba(160, 155, 220, 0.75);
+  font-weight: 600;
+  padding: 0 4px;
+}
+.vr-chat-msg.own .msg-sender {
+  text-align: right;
+}
+
+.vr-chat-msg .msg-bubble {
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.vr-chat-msg.own .msg-bubble {
+  background: linear-gradient(135deg, #6d5aff, #8b82ff);
+  color: #ffffff;
+  border-bottom-right-radius: 3px;
+  box-shadow: 0 4px 14px rgba(109, 90, 255, 0.3);
+}
+.vr-chat-msg.other .msg-bubble {
+  background: rgba(30, 33, 70, 0.85);
+  border: 1px solid rgba(139, 130, 255, 0.14);
+  color: #e2e0ff;
+  border-bottom-left-radius: 3px;
+}
+
+.vr-chat-msg .msg-time {
+  font-size: 10px;
+  color: rgba(160, 155, 220, 0.5);
+  padding: 0 4px;
+}
+.vr-chat-msg.own .msg-time {
+  text-align: right;
+}
+
+.vr-chat-system {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(160, 155, 220, 0.6);
+  padding: 6px 12px;
+  background: rgba(139, 130, 255, 0.06);
+  border-radius: 8px;
+  font-style: italic;
+  margin: 4px auto;
+  max-width: 90%;
+}
+
+.vr-chat-input-row {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(139, 130, 255, 0.14);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: rgba(20, 23, 50, 0.5);
+}
+.vr-chat-input-row input {
+  flex: 1;
+  background: rgba(25, 28, 60, 0.8);
+  border: 1px solid rgba(139, 130, 255, 0.2);
+  border-radius: 12px;
+  padding: 11px 14px;
+  color: #e2e0ff;
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.vr-chat-input-row input:focus {
+  border-color: #8b82ff;
+  box-shadow: 0 0 0 3px rgba(139, 130, 255, 0.2);
+}
+.vr-chat-input-row input::placeholder {
+  color: rgba(160, 155, 220, 0.45);
+}
+.vr-chat-input-row button {
+  background: linear-gradient(135deg, #6d5aff, #8b82ff);
+  border: none;
+  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.vr-chat-input-row button:hover {
+  transform: scale(1.05);
+}
+.vr-chat-input-row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Host controls panel */
+.vr-host-controls {
+  background: rgba(15, 17, 40, 0.6);
+  border: 1px solid rgba(255, 180, 80, 0.25);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-top: 18px;
+}
+.vr-host-controls h4 {
+  color: #ffb44e;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.vr-host-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.vr-host-btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 130, 255, 0.25);
+  background: rgba(25, 28, 60, 0.7);
+  color: #d4d0ff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vr-host-btn:hover {
+  background: rgba(109, 90, 255, 0.25);
+  border-color: rgba(139, 130, 255, 0.5);
+}
+.vr-host-btn.danger {
+  border-color: rgba(255, 100, 100, 0.35);
+  color: #ff9090;
+}
+.vr-host-btn.danger:hover {
+  background: rgba(255, 60, 60, 0.2);
+}
+
+/* Connection status banner */
+.vr-connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.vr-connection-status.connected {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.vr-connection-status.connecting {
+  background: rgba(139, 130, 255, 0.12);
+  color: #a99aff;
+  border: 1px solid rgba(139, 130, 255, 0.25);
+}
+.vr-connection-status.failed {
+  background: rgba(255, 80, 80, 0.12);
+  color: #ff9090;
+  border: 1px solid rgba(255, 80, 80, 0.25);
+}
+.vr-connection-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.vr-connection-status.connected .status-dot {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+.vr-connection-status.connecting .status-dot {
+  background: #8b82ff;
+  animation: vrPulseStatus 1.2s infinite;
+}
+.vr-connection-status.failed .status-dot {
+  background: #ff6060;
+}
+
+@keyframes vrPulseStatus {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* Participant action buttons (for host) */
+.vr-person-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  justify-content: center;
+}
+.vr-person-action {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 130, 255, 0.22);
+  background: rgba(25, 28, 60, 0.6);
+  color: #a09bdc;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.vr-person-action:hover {
+  background: rgba(109, 90, 255, 0.25);
+  color: #fff;
+  border-color: #8b82ff;
+}
+.vr-person-action.danger:hover {
+  background: rgba(255, 60, 60, 0.25);
+  color: #ff9090;
+  border-color: #ff6060;
+}
+
+
 

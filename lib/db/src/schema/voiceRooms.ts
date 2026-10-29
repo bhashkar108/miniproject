@@ -37,3 +37,16 @@ export type VoiceRoomRecord = typeof voiceRoomsTable.$inferSelect;
 export type InsertVoiceRoomRecord = typeof voiceRoomsTable.$inferInsert;
 export type VoiceRoomParticipantRecord = typeof voiceRoomParticipantsTable.$inferSelect;
 export type InsertVoiceRoomParticipantRecord = typeof voiceRoomParticipantsTable.$inferInsert;
+
+// ── Chat messages table ──────────────────────────────────────────────
+export const voiceRoomChatMessagesTable = pgTable("tech_ai_voice_room_chat_messages", {
+  id: serial("id").primaryKey(),
+  roomId: varchar("room_id", { length: 128 }).notNull().references(() => voiceRoomsTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  userName: text("user_name").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type VoiceRoomChatMessageRecord = typeof voiceRoomChatMessagesTable.$inferSelect;
+export type InsertVoiceRoomChatMessageRecord = typeof voiceRoomChatMessagesTable.$inferInsert;

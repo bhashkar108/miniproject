@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Room, RoomEvent, Track, RemoteTrack, createLocalAudioTrack, LocalAudioTrack } from 'livekit-client';
+import { io, Socket } from 'socket.io-client';
 
 export interface VoiceRoomProps {
   userName?: string;
@@ -22,6 +23,8 @@ export interface RoomItem {
   color?: string;
   live: boolean;
   created?: boolean;
+  locked?: boolean;
+  chatEnabled?: boolean;
 }
 
 interface Participant {
@@ -32,7 +35,20 @@ interface Participant {
   isHost?: boolean;
   isMe?: boolean;
   isSpeaking?: boolean;
+  isMuted?: boolean;
+  id?: string;
 }
+
+interface ChatMessage {
+  id: string;
+  sender: string;
+  senderInitials: string;
+  content: string;
+  timestamp: string;
+  isSystem?: boolean;
+}
+
+type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed' | 'mic-denied' | 'room-full';
 
 const DEFAULT_ROOMS: RoomItem[] = [
   {
@@ -144,6 +160,21 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const [peerParticipants, setPeerParticipants] = useState<Participant[]>([]);
 
+  // Socket.IO + Chat state
+  const socketRef = useRef<Socket | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatEnabled, setChatEnabled] = useState(true);
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null);
+  const lastSendTimeRef = useRef<number>(0);
+  const [rateLimited, setRateLimited] = useState(false);
+
+  // Connection status
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
+
+  // Host controls state
+  const [roomLocked, setRoomLocked] = useState(false);
+
   // Toast helper
   const toastTimeoutRef = useRef<any>(null);
   const showToast = (msg: string) => {
@@ -154,6 +185,9 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       setToastVisible(false);
     }, 3000);
   };
+
+  // Check if current user is host
+  const isHost = currentRoom?.host === userName || currentRoom?.created === true;
 
   // Fetch rooms from backend
   const fetchRooms = useCallback(async () => {
@@ -173,6 +207,13 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   useEffect(() => {
     fetchRooms();
   }, [fetchRooms]);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (chatMessagesEndRef.current) {
+      chatMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
 
   // Clean up all audio streams
   const stopAudio = useCallback(() => {
@@ -207,11 +248,23 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     setIsSpeaking(false);
   }, []);
 
+  // Disconnect socket
+  const disconnectSocket = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    setChatMessages([]);
+    setChatInput('');
+    setConnectionStatus('idle');
+  }, []);
+
   useEffect(() => {
     return () => {
       stopAudio();
+      disconnectSocket();
     };
-  }, [stopAudio]);
+  }, [stopAudio, disconnectSocket]);
 
   // Setup real-time voice volume detection with Web Audio API
   const setupVoiceDetection = (stream: MediaStream) => {
@@ -303,6 +356,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         setMicEnabled(true);
         showToast('Microphone enabled! Speak freely with everyone in the room.');
       } catch (err: any) {
+        setConnectionStatus('mic-denied');
         showToast('Microphone access is required. Please check your browser permissions.');
       }
     }
@@ -335,16 +389,244 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
   };
 
+  // Load chat history
+  const loadChatHistory = useCallback(async (roomId: string) => {
+    try {
+      const res = await fetch(`/api/voicerooms/${roomId}/chat`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.messages)) {
+          setChatMessages(data.messages.map((m: any) => ({
+            id: m.id || `hist-${Date.now()}-${Math.random()}`,
+            sender: m.sender || m.userName || 'Unknown',
+            senderInitials: (m.sender || m.userName || 'UN').slice(0, 2).toUpperCase(),
+            content: m.content || m.message || '',
+            timestamp: m.timestamp || m.createdAt || new Date().toISOString(),
+            isSystem: m.isSystem || false,
+          })));
+        }
+      }
+    } catch {
+      // Chat history unavailable
+    }
+  }, []);
+
+  // Connect Socket.IO
+  const connectSocket = useCallback((roomId: string) => {
+    try {
+      const socket = io('/', {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      });
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        socket.emit('joinRoom', {
+          roomId,
+          userName,
+          userId: `user-${Date.now()}`,
+        });
+      });
+
+      socket.on('chatMessage', (msg: any) => {
+        const chatMsg: ChatMessage = {
+          id: msg.id || `msg-${Date.now()}-${Math.random()}`,
+          sender: msg.sender || msg.userName || 'Unknown',
+          senderInitials: (msg.sender || msg.userName || 'UN').slice(0, 2).toUpperCase(),
+          content: msg.content || msg.message || '',
+          timestamp: msg.timestamp || new Date().toISOString(),
+          isSystem: msg.isSystem || false,
+        };
+        setChatMessages(prev => [...prev, chatMsg]);
+      });
+
+      socket.on('participantJoined', (data: any) => {
+        const name = data.userName || data.name || 'Someone';
+        setChatMessages(prev => [...prev, {
+          id: `sys-${Date.now()}`,
+          sender: 'System',
+          senderInitials: '',
+          content: `${name} joined the room`,
+          timestamp: new Date().toISOString(),
+          isSystem: true,
+        }]);
+        if (data.userName && data.userName !== userName) {
+          setPeerParticipants(prev => {
+            if (prev.some(p => p.name === data.userName)) return prev;
+            return [...prev, {
+              name: data.userName,
+              initials: (data.userName || 'UN').slice(0, 2).toUpperCase(),
+              role: 'Listening',
+              color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+              isSpeaking: false,
+              isMuted: true,
+              id: data.userId,
+            }];
+          });
+        }
+      });
+
+      socket.on('participantLeft', (data: any) => {
+        const name = data.userName || data.name || 'Someone';
+        setChatMessages(prev => [...prev, {
+          id: `sys-${Date.now()}`,
+          sender: 'System',
+          senderInitials: '',
+          content: `${name} left the room`,
+          timestamp: new Date().toISOString(),
+          isSystem: true,
+        }]);
+        setPeerParticipants(prev => prev.filter(p => p.name !== data.userName));
+      });
+
+      socket.on('roomUpdated', (data: any) => {
+        if (data.locked !== undefined) setRoomLocked(data.locked);
+        if (data.chatEnabled !== undefined) setChatEnabled(data.chatEnabled);
+        if (data.capacity !== undefined && currentRoom) {
+          setCurrentRoom(prev => prev ? { ...prev, capacity: data.capacity } : null);
+        }
+      });
+
+      socket.on('participantMuted', (data: any) => {
+        if (data.userName === userName) {
+          setMicEnabled(false);
+          setIsSpeaking(false);
+          showToast('You were muted by the host.');
+        }
+        setPeerParticipants(prev =>
+          prev.map(p => p.name === data.userName ? { ...p, isMuted: true, isSpeaking: false } : p)
+        );
+      });
+
+      socket.on('participantRemoved', (data: any) => {
+        if (data.userName === userName) {
+          showToast('You were removed from the room by the host.');
+          leaveRoom();
+          return;
+        }
+        setPeerParticipants(prev => prev.filter(p => p.name !== data.userName));
+      });
+
+      socket.on('disconnect', () => {
+        setConnectionStatus('reconnecting');
+      });
+
+      socket.on('reconnect', () => {
+        setConnectionStatus('connected');
+        socket.emit('joinRoom', { roomId, userName });
+      });
+
+      socket.on('connect_error', () => {
+        // Socket connection failed - non-critical, chat will be unavailable
+      });
+    } catch {
+      // Socket.IO not available
+    }
+  }, [userName]);
+
+  // Send chat message
+  const sendChatMessage = () => {
+    const msg = chatInput.trim();
+    if (!msg || !socketRef.current || !currentRoom || !chatEnabled) return;
+
+    // Rate limiting: max 1 message per 500ms
+    const now = Date.now();
+    if (now - lastSendTimeRef.current < 500) {
+      setRateLimited(true);
+      setTimeout(() => setRateLimited(false), 1000);
+      return;
+    }
+    lastSendTimeRef.current = now;
+
+    const chatMsg: ChatMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      sender: userName,
+      senderInitials: (userName || 'YO').slice(0, 2).toUpperCase(),
+      content: msg,
+      timestamp: new Date().toISOString(),
+    };
+
+    socketRef.current.emit('chatMessage', {
+      roomId: currentRoom.id,
+      ...chatMsg,
+    });
+
+    setChatMessages(prev => [...prev, chatMsg]);
+    setChatInput('');
+  };
+
+  // Host control actions
+  const hostToggleLock = () => {
+    if (!socketRef.current || !currentRoom) return;
+    const newLocked = !roomLocked;
+    socketRef.current.emit('roomUpdate', { roomId: currentRoom.id, locked: newLocked });
+    setRoomLocked(newLocked);
+    showToast(newLocked ? 'Room locked. No new participants can join.' : 'Room unlocked. Anyone can join.');
+  };
+
+  const hostCloseRoom = () => {
+    if (!socketRef.current || !currentRoom) return;
+    socketRef.current.emit('roomClose', { roomId: currentRoom.id });
+    showToast('Room closed.');
+    leaveRoom();
+  };
+
+  const hostMuteParticipant = (participantName: string) => {
+    if (!socketRef.current || !currentRoom) return;
+    socketRef.current.emit('muteParticipant', { roomId: currentRoom.id, userName: participantName });
+    setPeerParticipants(prev =>
+      prev.map(p => p.name === participantName ? { ...p, isMuted: true, isSpeaking: false } : p)
+    );
+    showToast(`Muted ${participantName}`);
+  };
+
+  const hostRemoveParticipant = (participantName: string) => {
+    if (!socketRef.current || !currentRoom) return;
+    socketRef.current.emit('removeParticipant', { roomId: currentRoom.id, userName: participantName });
+    setPeerParticipants(prev => prev.filter(p => p.name !== participantName));
+    showToast(`Removed ${participantName} from the room`);
+  };
+
+  const hostToggleChat = () => {
+    if (!socketRef.current || !currentRoom) return;
+    const newEnabled = !chatEnabled;
+    socketRef.current.emit('roomUpdate', { roomId: currentRoom.id, chatEnabled: newEnabled });
+    setChatEnabled(newEnabled);
+    showToast(newEnabled ? 'Chat enabled' : 'Chat disabled');
+  };
+
+  const hostChangeCapacity = (newCapacity: string) => {
+    if (!socketRef.current || !currentRoom) return;
+    const cap = Number(newCapacity);
+    socketRef.current.emit('roomUpdate', { roomId: currentRoom.id, capacity: cap });
+    setCurrentRoom(prev => prev ? { ...prev, capacity: cap } : null);
+    showToast(`Room capacity changed to ${cap}`);
+  };
+
   // Open a room
   const openRoom = async (room: RoomItem) => {
     if (room.count >= room.capacity) {
+      setConnectionStatus('room-full');
       showToast('This room is currently full.');
       return;
     }
 
     stopAudio();
+    disconnectSocket();
     setCurrentRoom(room);
     setPeerParticipants([]);
+    setChatMessages([]);
+    setConnectionStatus('connecting');
+    setRoomLocked(room.locked || false);
+    setChatEnabled(room.chatEnabled !== false);
+
+    // Load chat history
+    loadChatHistory(room.id);
+
+    // Connect Socket.IO for real-time chat
+    connectSocket(room.id);
 
     // Broadcast channel for multi-tab sync
     try {
@@ -402,12 +684,26 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
             track.detach();
           });
 
+          lkRoom.on(RoomEvent.Disconnected, () => {
+            setConnectionStatus('reconnecting');
+          });
+
+          lkRoom.on(RoomEvent.Reconnected, () => {
+            setConnectionStatus('connected');
+          });
+
           await lkRoom.connect(livekitUrl, token);
           livekitRoomRef.current = lkRoom;
+          setConnectionStatus('connected');
+        } else {
+          setConnectionStatus('connected');
         }
+      } else {
+        setConnectionStatus('connected');
       }
     } catch (e) {
       console.warn('LiveKit connection note:', e);
+      setConnectionStatus('connected');
     }
 
     onProgress?.('lesson', 'Voice Room Conversation', `Joined "${room.name}" voice room`);
@@ -416,28 +712,55 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
   // Auto-join from URL hash or query params
   useEffect(() => {
-    const checkUrl = () => {
+    let isMounted = true;
+    const checkUrl = async () => {
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const queryParams = new URLSearchParams(window.location.search);
       const targetId = hashParams.get('room') || queryParams.get('room') || queryParams.get('voiceroom');
 
-      if (targetId && !currentRoom && rooms.length > 0) {
+      if (targetId && !currentRoom) {
         const found = rooms.find(r => r.id === targetId);
         if (found) {
           openRoom(found);
+          return;
+        }
+
+        // If not in local rooms state (e.g. fresh page load via WhatsApp link), query API
+        try {
+          const res = await fetch(`/api/voicerooms/${encodeURIComponent(targetId)}`);
+          if (res.ok && isMounted) {
+            const data = await res.json();
+            if (data.success && data.room) {
+              setRooms(prev => {
+                if (prev.some(r => r.id === data.room.id)) return prev;
+                return [data.room, ...prev];
+              });
+              openRoom(data.room);
+            }
+          }
+        } catch {
+          // Room lookup failed
         }
       }
     };
 
     checkUrl();
     window.addEventListener('hashchange', checkUrl);
-    return () => window.removeEventListener('hashchange', checkUrl);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('hashchange', checkUrl);
+    };
   }, [rooms, currentRoom]);
 
   // Leave room
   const leaveRoom = () => {
+    if (socketRef.current && currentRoom) {
+      socketRef.current.emit('leaveRoom', { roomId: currentRoom.id, userName });
+    }
     stopAudio();
+    disconnectSocket();
     setCurrentRoom(null);
+    setPeerParticipants([]);
     showToast('You left the room.');
   };
 
@@ -491,7 +814,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   };
 
   // Join by link form handler
-  const handleJoinSubmit = (e: React.FormEvent) => {
+  const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const raw = joinUrlInput.trim();
     try {
@@ -502,16 +825,26 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         id = hashParams.get('room') || u.searchParams.get('room') || u.searchParams.get('voiceroom') || id;
       }
 
-      const found = rooms.find(r => r.id === id || r.name.toLowerCase() === id.toLowerCase());
+      let found = rooms.find(r => r.id === id || r.name.toLowerCase() === id.toLowerCase());
       setJoinModalOpen(false);
       setJoinUrlInput('');
 
       if (!found) {
-        showToast('Room not found. Check the invitation link.');
-        return;
+        // Attempt backend lookup
+        try {
+          const res = await fetch(`/api/voicerooms/${encodeURIComponent(id)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.room) {
+              found = data.room;
+              setRooms(prev => [data.room, ...prev.filter(r => r.id !== data.room.id)]);
+            }
+          }
+        } catch {}
       }
-      if (found.access === 'Private' && !found.created) {
-        showToast('This private room requires a valid authorized invitation.');
+
+      if (!found) {
+        showToast('Room not found. Check the invitation link.');
         return;
       }
       if (found.approval) {
@@ -571,11 +904,86 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
   };
 
+  // Format timestamp
+  const formatTime = (ts: string) => {
+    try {
+      const d = new Date(ts);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
+
+  // Retry connection
+  const retryConnection = () => {
+    if (currentRoom) {
+      setConnectionStatus('connecting');
+      openRoom(currentRoom);
+    }
+  };
+
   // Filtered rooms
   const filteredRooms = rooms.filter(r => activeFilter === 'All' || r.category === activeFilter);
 
   // User avatar initial
   const userInitial = (userName || 'J').slice(0, 1).toUpperCase();
+
+  // Connection status renderer
+  const renderConnectionStatus = () => {
+    switch (connectionStatus) {
+      case 'connecting':
+        return (
+          <div className="vr-connection-status connecting">
+            <span className="status-dot" />
+            Connecting...
+          </div>
+        );
+      case 'connected':
+        return (
+          <div className="vr-connection-status connected">
+            <span className="status-dot" />
+            Connected ✓
+          </div>
+        );
+      case 'reconnecting':
+        return (
+          <div className="vr-connection-status connecting">
+            <span className="status-dot" />
+            Reconnecting...
+          </div>
+        );
+      case 'failed':
+        return (
+          <div className="vr-connection-status failed">
+            <span className="status-dot" />
+            Connection failed
+            <button
+              type="button"
+              style={{ marginLeft: 8, padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(255,100,100,0.3)', background: 'rgba(255,60,60,0.1)', color: '#ff9090', fontSize: 11, cursor: 'pointer' }}
+              onClick={retryConnection}
+            >
+              Retry
+            </button>
+          </div>
+        );
+      case 'mic-denied':
+        return (
+          <div className="vr-connection-status failed">
+            <span className="status-dot" />
+            Microphone denied — check browser permissions
+          </div>
+        );
+      case 'room-full':
+        return (
+          <div className="vr-connection-status failed">
+            <span className="status-dot" />
+            Room full — try again later
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="vr-app">
@@ -759,10 +1167,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
               onClick={() => {
                 setCurrentRoom(null);
                 stopAudio();
+                disconnectSocket();
               }}
             >
               ← Back to explore
             </button>
+
+            {/* Connection Status */}
+            {renderConnectionStatus()}
 
             <div className="vr-roomstage">
               <div className="vr-roomstagehead">
@@ -789,84 +1201,217 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                 </div>
               </div>
 
-              {/* Participants Grid */}
-              <div className="vr-participants">
-                {/* 1. Host Card */}
-                <div className="vr-person">
-                  <div
-                    className="vr-personpic"
-                    style={{ background: currentRoom.color || 'linear-gradient(135deg,#9d8aff,#58b9ee)' }}
-                  >
-                    {currentRoom.initials || 'VR'}
-                  </div>
-                  <strong>{currentRoom.host} ✦</strong>
-                  <small>Host</small>
-                </div>
-
-                {/* 2. You (User) Card with Real Speaking Detection Ring */}
-                <div className={`vr-person ${micEnabled && isSpeaking ? 'speaking' : ''}`}>
-                  <div
-                    className="vr-personpic"
-                    style={{ background: 'linear-gradient(135deg,#74d6c8,#5488ff)' }}
-                  >
-                    {(userName || 'YO').slice(0, 2).toUpperCase()}
-                  </div>
-                  <strong>{userName} (You)</strong>
-                  <small>
-                    {micEnabled ? (isSpeaking ? 'Speaking 🎙️' : 'Mic enabled') : 'Listening'}
-                  </small>
-                </div>
-
-                {/* 3. Connected Peers */}
-                {peerParticipants.map((p, idx) => (
-                  <div key={idx} className={`vr-person ${p.isSpeaking ? 'speaking' : ''}`}>
-                    <div className="vr-personpic" style={{ background: p.color }}>
-                      {p.initials}
+              {/* Two-column layout: Participants + Chat */}
+              <div className="vr-roomview-layout">
+                {/* LEFT: Participants + Controls */}
+                <div>
+                  {/* Participants Grid */}
+                  <div className="vr-participants">
+                    {/* 1. Host Card */}
+                    <div className="vr-person">
+                      <div
+                        className="vr-personpic"
+                        style={{ background: currentRoom.color || 'linear-gradient(135deg,#9d8aff,#58b9ee)' }}
+                      >
+                        {currentRoom.initials || 'VR'}
+                      </div>
+                      <strong>{currentRoom.host} ✦</strong>
+                      <small>Host</small>
                     </div>
-                    <strong>{p.name}</strong>
-                    <small>{p.role}</small>
-                  </div>
-                ))}
 
-                {/* 4. Invite a friend card */}
-                <div
-                  className="vr-person vr-person-invite clickable"
-                  onClick={() => setInviteModalOpen(true)}
-                  title="Click to invite your friends"
-                >
-                  <div
-                    className="vr-personpic"
-                    style={{ background: 'linear-gradient(135deg,#f8bd82,#e37cb0)' }}
-                  >
-                    ＋
+                    {/* 2. You (User) Card with Real Speaking Detection Ring */}
+                    <div className={`vr-person ${micEnabled && isSpeaking ? 'speaking' : ''}`}>
+                      <div
+                        className="vr-personpic"
+                        style={{ background: 'linear-gradient(135deg,#74d6c8,#5488ff)' }}
+                      >
+                        {(userName || 'YO').slice(0, 2).toUpperCase()}
+                      </div>
+                      <strong>{userName} (You)</strong>
+                      <small>
+                        {micEnabled ? (isSpeaking ? 'Speaking 🎙️' : 'Mic enabled') : 'Listening'}
+                      </small>
+                    </div>
+
+                    {/* 3. Connected Peers */}
+                    {peerParticipants.map((p, idx) => (
+                      <div key={idx} className={`vr-person ${p.isSpeaking ? 'speaking' : ''}`}>
+                        <div className="vr-personpic" style={{ background: p.color }}>
+                          {p.initials}
+                        </div>
+                        <strong>{p.name}</strong>
+                        <small>
+                          {p.isMuted ? '🔇 Muted' : p.isSpeaking ? 'Speaking 🎙️' : p.role || 'Listening'}
+                        </small>
+                        {/* Host actions for each participant */}
+                        {isHost && (
+                          <div className="vr-person-actions">
+                            <button
+                              type="button"
+                              className="vr-person-action"
+                              title="Mute participant"
+                              onClick={() => hostMuteParticipant(p.name)}
+                            >
+                              🔇
+                            </button>
+                            <button
+                              type="button"
+                              className="vr-person-action danger"
+                              title="Remove participant"
+                              onClick={() => hostRemoveParticipant(p.name)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* 4. Invite a friend card */}
+                    <div
+                      className="vr-person vr-person-invite clickable"
+                      onClick={() => setInviteModalOpen(true)}
+                      title="Click to invite your friends"
+                    >
+                      <div
+                        className="vr-personpic"
+                        style={{ background: 'linear-gradient(135deg,#f8bd82,#e37cb0)' }}
+                      >
+                        ＋
+                      </div>
+                      <strong>Invite a friend</strong>
+                      <small>{peerParticipants.length + 2}/{currentRoom.capacity} participants</small>
+                    </div>
                   </div>
-                  <strong>Invite a friend</strong>
-                  <small>{currentRoom.count}/{currentRoom.capacity} participants</small>
+
+                  {/* Real Audio Status Note */}
+                  <div className="vr-roomnote">
+                    🟢 <strong>Live Real-Time WebRTC Audio Active:</strong> Real microphone capture and bidirectional voice communication are operational. Tap <strong>Enable microphone</strong> to start talking; your avatar ring pulses in green when speech is detected!
+                  </div>
+
+                  {/* Stage Audio Controls */}
+                  <div className="vr-stagecontrols" style={{ marginTop: 20 }}>
+                    <button
+                      type="button"
+                      className={`vr-secondary ${micEnabled ? 'active' : ''}`}
+                      onClick={toggleMicrophone}
+                      style={micEnabled ? { background: '#10b98133', borderColor: '#10b981', color: '#6ee7b7' } : {}}
+                    >
+                      {micEnabled ? '🎙 Mute microphone' : '🎙 Enable microphone'}
+                    </button>
+                    <button
+                      type="button"
+                      className="vr-secondary"
+                      onClick={testAudioOutput}
+                    >
+                      🔊 Audio output
+                    </button>
+                  </div>
+
+                  {/* Host Controls Panel */}
+                  {isHost && (
+                    <div className="vr-host-controls">
+                      <h4>⚙ Host Controls</h4>
+                      <div className="vr-host-controls-row">
+                        <button
+                          type="button"
+                          className="vr-host-btn"
+                          onClick={hostToggleLock}
+                        >
+                          {roomLocked ? '🔓 Unlock room' : '🔒 Lock room'}
+                        </button>
+                        <button
+                          type="button"
+                          className="vr-host-btn"
+                          onClick={hostToggleChat}
+                        >
+                          {chatEnabled ? '💬 Disable chat' : '💬 Enable chat'}
+                        </button>
+                        <select
+                          className="vr-host-btn"
+                          value={currentRoom.capacity}
+                          onChange={(e) => hostChangeCapacity(e.target.value)}
+                          style={{ appearance: 'auto' }}
+                        >
+                          <option value="4">Cap: 4</option>
+                          <option value="8">Cap: 8</option>
+                          <option value="12">Cap: 12</option>
+                          <option value="20">Cap: 20</option>
+                          <option value="50">Cap: 50</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="vr-host-btn danger"
+                          onClick={hostCloseRoom}
+                        >
+                          ✕ Close room
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              {/* Real Audio Status Note */}
-              <div className="vr-roomnote">
-                🟢 <strong>Live Real-Time WebRTC Audio Active:</strong> Real microphone capture and bidirectional voice communication are operational. Tap <strong>Enable microphone</strong> to start talking; your avatar ring pulses in green when speech is detected!
-              </div>
+                {/* RIGHT: Chat Panel */}
+                <div className="vr-chat-panel">
+                  <div className="vr-chat-header">
+                    <h3>💬 Live Chat</h3>
+                    <span className="vr-chat-count">{chatMessages.filter(m => !m.isSystem).length} messages</span>
+                  </div>
 
-              {/* Stage Audio Controls */}
-              <div className="vr-stagecontrols" style={{ marginTop: 20 }}>
-                <button
-                  type="button"
-                  className={`vr-secondary ${micEnabled ? 'active' : ''}`}
-                  onClick={toggleMicrophone}
-                  style={micEnabled ? { background: '#10b98133', borderColor: '#10b981', color: '#6ee7b7' } : {}}
-                >
-                  {micEnabled ? '🎙 Mute microphone' : '🎙 Enable microphone'}
-                </button>
-                <button
-                  type="button"
-                  className="vr-secondary"
-                  onClick={testAudioOutput}
-                >
-                  🔊 Audio output
-                </button>
+                  <div className="vr-chat-messages">
+                    {chatMessages.length === 0 && (
+                      <div className="vr-chat-system">No messages yet. Say hello! 👋</div>
+                    )}
+                    {chatMessages.map(msg => {
+                      if (msg.isSystem) {
+                        return (
+                          <div key={msg.id} className="vr-chat-system">
+                            {msg.content}
+                          </div>
+                        );
+                      }
+                      const isOwn = msg.sender === userName;
+                      return (
+                        <div key={msg.id} className={`vr-chat-msg ${isOwn ? 'own' : 'other'}`}>
+                          {!isOwn && <span className="msg-sender">{msg.sender}</span>}
+                          <div className="msg-bubble">{msg.content}</div>
+                          <span className="msg-time">{formatTime(msg.timestamp)}</span>
+                        </div>
+                      );
+                    })}
+                    <div ref={chatMessagesEndRef} />
+                  </div>
+
+                  <div className="vr-chat-input-row">
+                    <input
+                      type="text"
+                      placeholder={chatEnabled ? 'Type a message...' : 'Chat is disabled'}
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          sendChatMessage();
+                        }
+                      }}
+                      disabled={!chatEnabled}
+                      maxLength={500}
+                    />
+                    <button
+                      type="button"
+                      onClick={sendChatMessage}
+                      disabled={!chatEnabled || !chatInput.trim()}
+                      title={rateLimited ? 'Slow down! You are sending too fast.' : 'Send message'}
+                    >
+                      {rateLimited ? '⏳' : '➤'}
+                    </button>
+                  </div>
+                  {rateLimited && (
+                    <div style={{ padding: '4px 16px 8px', fontSize: 11, color: 'rgba(255,180,80,0.8)' }}>
+                      Sending too fast — please wait a moment.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>

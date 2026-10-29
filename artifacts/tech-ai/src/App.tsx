@@ -35,7 +35,7 @@ const client = new QueryClient();
 type Module = 'home' | 'teacher' | 'voice' | 'voiceroom' | 'docs' | 'equations' | 'quiz' | 'progress' | 'profile';
 type UiLanguage = 'English'|'Hindi'|'Hinglish'|'Bengali'|'Tamil'|'Telugu'|'Marathi'|'Gujarati'|'Punjabi'|'Kannada'|'Malayalam'|'Odia';
 type QuizWithSource = QuizAnalysis & { sourceFile?: File; sourceUrl: string };
-type Recognition = { lang:string; continuous:boolean; interimResults:boolean; onresult:((event:any)=>void)|null; onend:(()=>void)|null; onerror:(()=>void)|null; start:()=>void; stop:()=>void };
+type Recognition = { lang:string; continuous:boolean; interimResults:boolean; onstart?:(()=>void)|null; onresult:((event:any)=>void)|null; onend:(()=>void)|null; onerror:((event?:any)=>void)|null; start:()=>void; stop:()=>void };
 type RecognitionConstructor = new () => Recognition;
 type InstallPromptEvent = Event & { prompt:()=>Promise<void>; userChoice:Promise<{outcome:string}> };
 function normalizePublicFormUrl(rawUrl:string) {
@@ -1344,6 +1344,7 @@ function LessonOutput({
       }, 350);
       return () => clearTimeout(t);
     }
+    return undefined;
   }, [lesson, autoPlay]);
 
   const highlighted = (text: string, offset: number) => Array.from(text.matchAll(/\S+|\s+/g)).map((match, index) => {
