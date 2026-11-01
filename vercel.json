@@ -3,7 +3,7 @@
   "framework": "vite",
   "buildCommand": "pnpm --filter @workspace/tech-ai build",
   "outputDirectory": "artifacts/tech-ai/dist/public",
-  "installCommand": "pnpm install",
+  "installCommand": "pnpm install --no-frozen-lockfile",
   "cleanUrls": true,
   "rewrites": [
     {
