@@ -374,6 +374,134 @@ const LANGUAGE_DATA: Record<string, {
       Intermediate: 'আমি আমার কথা বলার দক্ষতা বৃদ্ধি করতে চাই যাতে আত্মবিশ্বাসের সাথে কথা বলতে পারি।',
       Advanced: 'সাবলীল যোগাযোগ দক্ষতা যে কোনো পেশাগত ক্ষেত্রে সাফল্যের প্রধান চাবিকাঠি।'
     }
+  },
+  'de-DE': {
+    name: 'German (Deutsch)',
+    flag: '🇩🇪',
+    code: 'de-DE',
+    starter: "Hallo! 👋 Willkommen zu deiner Sprechpraxis. Lass uns über deinen Tag sprechen.\n\nFrage: Was machst du normalerweise gerne in deiner Freizeit?",
+    initialQuestion: 'Was machst du normalerweise gerne in deiner Freizeit?',
+    topics: {
+      'Daily life': 'Lass uns über den Alltag sprechen! Was ist deine liebste Tageszeit und warum?',
+      'College & studies': 'Studium & Bildung: Welches Fach interessiert dich am meisten?',
+      'Hobbies & sports': 'Hobbys & Sport: Welche Sportart oder welches Hobby macht dir am meisten Spaß?',
+      'Technology & AI': 'Technologie & KI: Welche digitale Technologie nutzt du jeden Tag?'
+    },
+    suggestionsByKeyword: {
+      'free time': {
+        Beginner: 'In meiner Freizeit spiele ich gerne Fußball.',
+        Intermediate: 'In meiner Freizeit mache ich Sport, weil es mich fit und motiviert hält.',
+        Advanced: 'In meiner Freizeit widme ich mich sportlichen und intellektuellen Aktivitäten zur persönlichen Weiterentwicklung.'
+      }
+    },
+    aiReplies: {
+      sport: {
+        Beginner: 'Das klingt super! Mit wem spielst du am liebsten?',
+        Intermediate: 'Sport ist fantastisch für die Gesundheit. Wie oft trainierst du in der Woche?',
+        Advanced: 'Sportliche Aktivität fördert Disziplin und mentale Stärke. Welche Werte schätzt du daran am meisten?'
+      }
+    },
+    defaultReplies: {
+      Beginner: 'Ich lerne und übe jeden Tag Deutsch.',
+      Intermediate: 'Ich möchte meine Sprechfertigkeit verbessern, um mich im Beruf sicher zu verständigen.',
+      Advanced: 'Eine fundierte und überzeugende Kommunikation ist für meine akademische und berufliche Laufbahn unerlässlich.'
+    }
+  },
+  'ja-JP': {
+    name: 'Japanese (日本語)',
+    flag: '🇯🇵',
+    code: 'ja-JP',
+    starter: "こんにちは！👋 スピーキング練習へようこそ。今日の一日について話しましょう。\n\n質問: 自由な時間には普段何をしますか？",
+    initialQuestion: '自由な時間には普段何をしますか？',
+    topics: {
+      'Daily life': '日常生活について話しましょう！一日のうちで一番好きな時間はいつですか？',
+      'College & studies': '学業について: 一番興味のある勉強や専攻は何ですか？',
+      'Hobbies & sports': '趣味とスポーツ: 普段どんな趣味を楽しんでいますか？',
+      'Technology & AI': 'テクノロジーとAI: 毎日使っている便利なアプリや技術は何ですか？'
+    },
+    suggestionsByKeyword: {
+      'free time': {
+        Beginner: '自由な時間には本を読んだり散歩をします。',
+        Intermediate: '自由な時間には友達とスポーツをしてリフレッシュしています。',
+        Advanced: '余暇の時間には自己研鑽や運動を通じて、心身の健康と成長を意識して過ごしています。'
+      }
+    },
+    aiReplies: {
+      sport: {
+        Beginner: 'とても楽しそうですね！誰と一緒に楽しんでいますか？',
+        Intermediate: '運動は心身の健康に素晴らしいですね。普段どのくらいの頻度で運動しますか？',
+        Advanced: 'スポーツは規律と協調性を育みます。あなたの日常生活にどのような好影響を与えていますか？'
+      }
+    },
+    defaultReplies: {
+      Beginner: '毎日楽しく会話の練習をしています。',
+      Intermediate: '自分の考えを自信を持って表現できるようにスピーキング力を高めたいです。',
+      Advanced: '明確で説得力のあるコミュニケーション能力は、グローバル社会において極めて重要だと考えています。'
+    }
+  },
+  'zh-CN': {
+    name: 'Chinese (中文)',
+    flag: '🇨🇳',
+    code: 'zh-CN',
+    starter: "你好！👋 欢迎来到语言口语练习。让我们聊聊你的一天。\n\n问题：你在空闲时间通常喜欢做什么？",
+    initialQuestion: '你在空闲时间通常喜欢做什么？',
+    topics: {
+      'Daily life': '聊聊日常生活吧！你一天中最喜欢的时间是什么时候，为什么？',
+      'College & studies': '学业与成长：你最感兴趣的学科或专业是什么？',
+      'Hobbies & sports': '爱好与运动：闲暇时什么运动或爱好带给你最大的快乐？',
+      'Technology & AI': '科技与人工智能：你每天最常用的人工智能或科技工具是什么？'
+    },
+    suggestionsByKeyword: {
+      'free time': {
+        Beginner: '我在空闲时间喜欢跑步和听音乐。',
+        Intermediate: '在空闲时间，我喜欢和朋友一起运动，这让我保持充沛的活力。',
+        Advanced: '在闲暇时光中，我注重通过体育运动和阅读来全面提升个人的综合素质与专注力。'
+      }
+    },
+    aiReplies: {
+      sport: {
+        Beginner: '听起来真棒！你平时通常和谁一起运动？',
+        Intermediate: '运动对身心健康大有裨益。你一般每周锻炼几次？',
+        Advanced: '体育锻炼不仅能磨练意志，还能培养团队协作精神。这对你的学习和生活有哪些启发？'
+      }
+    },
+    defaultReplies: {
+      Beginner: '我喜欢每天练习并提高口语表达。',
+      Intermediate: '我希望通过持续的口语练习，在未来的学习和职场中更加自信地交流。',
+      Advanced: '流利、精准且富有洞察力的沟通能力是现代跨学科与国际化合作中至关重要的核心素养。'
+    }
+  },
+  'ar-SA': {
+    name: 'Arabic (العربية)',
+    flag: '🇸🇦',
+    code: 'ar-SA',
+    starter: "مرحباً! 👋 أهلاً بك في جلسة الممارسة الصوتية. فلنتحدث عن يومك.\n\nسؤال: ماذا تحب أن تفعل عادة في وقت فراغك؟",
+    initialQuestion: 'ماذا تحب أن تفعل عادة في وقت فراغك؟',
+    topics: {
+      'Daily life': 'لنتحدث عن الحياة اليومية! ما هو أفضل وقت في اليوم بالنسبة لك ولماذا؟',
+      'College & studies': 'الدراسة والجامعة: ما هو تخصصك الأكاديمي وما الموضوع الذي يثير اهتمامك أكثر؟',
+      'Hobbies & sports': 'الهوايات والرياضة: ما هي الهواية التي تستمتع بها أكثر؟',
+      'Technology & AI': 'التكنولوجيا والذكاء الاصطناعي: ما هي الأداة الرقمية التي تستخدمها يومياً؟'
+    },
+    suggestionsByKeyword: {
+      'free time': {
+        Beginner: 'في وقت فراغي أحب قراءة الكتب وممارسة الرياضة.',
+        Intermediate: 'في وقت فراغي أستمتع بممارسة الرياضة مع أصدقائي لأنها تمنحني طاقة إيجابية.',
+        Advanced: 'خلال أوقات فراغي، أحرص على ممارسة الأنشطة الفكرية والبدنية التي تعزز التطوير الذاتي.'
+      }
+    },
+    aiReplies: {
+      sport: {
+        Beginner: 'هذا رائع جداً! مع من تمارس الرياضة عادة؟',
+        Intermediate: 'الرياضة مفيدة جداً للصحة البدنية والتركيز الذهني. كم مرة تمارسها أسبوعياً؟',
+        Advanced: 'الممارسة الرياضية المنتظمة تصقل الانضباط وتعزز روح الفريق. كيف تؤثر على مسارك اليومي؟'
+      }
+    },
+    defaultReplies: {
+      Beginner: 'أحب ممارسة التحدث وتطوير لغتي يومياً.',
+      Intermediate: 'أرغب في تطوير مهارات المحادثة لدي حتى أتمكن من التواصل بثقة عالية.',
+      Advanced: 'التواصل الفعال والواضح يعد ركيزة أساسية لتحقيق النجاح الأكاديمي والمهني.'
+    }
   }
 };
 
@@ -403,6 +531,7 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
 
   const [favModalOpen, setFavModalOpen] = useState(false);
   const [topicModalOpen, setTopicModalOpen] = useState(false);
+  const [customTopicInput, setCustomTopicInput] = useState('');
   const [toastMessage, setToastMessage] = useState('');
 
   // Active language dataset
@@ -839,6 +968,41 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
 
     if (autoVoice) readText(q);
     showToast(`Topic set to: ${top}`);
+  };
+
+  // Apply Custom Topic entered by user
+  const handleApplyCustomTopic = (topicName?: string) => {
+    const custom = (topicName || customTopicInput).trim();
+    if (!custom) return;
+    setCurrentTopic(custom);
+    setTopicModalOpen(false);
+    setCustomTopicInput('');
+
+    let question = `Let's discuss "${custom}"! What are your thoughts or experience on this topic?`;
+    if (practiceLang.startsWith('hi')) {
+      question = `चलिए "${custom}" के बारे में बात करते हैं! इस विषय पर आपके क्या विचार या अनुभव हैं?`;
+    } else if (practiceLang.startsWith('es')) {
+      question = `¡Hablemos sobre "${custom}"! ¿Cuáles son tus opiniones o experiencias sobre este tema?`;
+    } else if (practiceLang.startsWith('fr')) {
+      question = `Parlons de "${custom}" ! Quels sont vos avis ou expériences à ce sujet ?`;
+    }
+
+    setCurrentQuestion(question);
+    setLastAIReply(question);
+    updateDynamicSuggestions(question, practiceLang);
+
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `custom-topic-${Date.now()}`,
+        sender: 'ai',
+        text: question,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+
+    if (autoVoice) readText(question);
+    showToast(`Topic set to: ${custom}`);
   };
 
   // Pick random topic
@@ -1316,6 +1480,76 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
                 <X size={16} />
               </button>
             </div>
+
+            {/* Custom Topic Input */}
+            <div className="custom-topic-box" style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#38bdf8', marginBottom: '6px' }}>
+                ✍️ Enter Any Custom Topic
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  placeholder="e.g. Artificial Intelligence in Education…"
+                  value={customTopicInput}
+                  onChange={(e) => setCustomTopicInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleApplyCustomTopic();
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    background: 'rgba(15,23,42,0.8)',
+                    border: '1px solid rgba(56,189,248,0.3)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    color: '#fff',
+                    fontSize: '12px',
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleApplyCustomTopic()}
+                  disabled={!customTopicInput.trim()}
+                  style={{
+                    background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    color: '#020617',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: customTopicInput.trim() ? 'pointer' : 'not-allowed',
+                    opacity: customTopicInput.trim() ? 1 : 0.5,
+                  }}
+                >
+                  Apply Topic
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px 4px' }}>
+              <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>POPULAR TOPICS</span>
+              <button
+                type="button"
+                onClick={() => { pickRandomTopic(); setTopicModalOpen(false); }}
+                style={{
+                  background: 'rgba(56,189,248,0.15)',
+                  border: '1px solid rgba(56,189,248,0.3)',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
+                  color: '#38bdf8',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                🎲 Random Topic
+              </button>
+            </div>
+
             <div className="voice-modal-list">
               {topicsList.map((top) => (
                 <div key={top} className="voice-modal-item">

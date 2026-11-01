@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { VoicePractice } from '@/components/VoicePractice';
 import { VoiceRoom } from '@/components/VoiceRoom';
+import { NexoraCopilot } from '@/components/NexoraCopilot';
 import { generateLocalTeacherLesson } from '@/lib/teacherFallback';
 import '@/index.css';
 
@@ -1228,6 +1229,12 @@ function AppContent() {
       </main>
     </div>
     {processedFullscreen&&processedUrl&&<div className="modal-backdrop processed-fs-backdrop" onClick={()=>setProcessedFullscreen(false)}><div className="preview-modal processed-fs-modal" onClick={e=>e.stopPropagation()}><div className="modal-header-row"><div><span className="eyebrow">FULL SCREEN PREVIEW</span><h2>{docFile?.name||'Processed Copy'}</h2>{processedSize!==null&&<span className="modal-size-tag">Output size: {fileSizeLabel(processedSize)}</span>}</div><button className="icon-button modal-close" onClick={()=>setProcessedFullscreen(false)} aria-label="Close preview"><X size={17}/></button></div><div className="fullscreen-doc-container">{processedType==='application/pdf'?<iframe src={processedUrl} title="Processed PDF" className="fullscreen-preview-frame"/>:<img src={processedUrl} alt="Processed Copy" className="fullscreen-preview-img"/>}</div><div className="modal-actions-row"><a className="button button-subtle" href={processedUrl} download={`processed-${docFile?.name.replace(/\.[^.]+$/,'')||'document'}.${processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg'}`}><Download size={15}/>Download copy</a><button className="button button-primary" onClick={()=>setProcessedFullscreen(false)}>Close preview</button></div></div></div>}
+    {/* Nexora AI Copilot – Floating website-wide assistant accessible on every page */}
+    <NexoraCopilot
+      currentModule={module}
+      onNavigate={switchModule}
+      userName={currentUser.name}
+    />
   </div>;
 }
 

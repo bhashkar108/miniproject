@@ -6722,3 +6722,104 @@
 
 
 
+
+/* ========================================================================= */
+/* ─── NEXORA AI COPILOT & PREMIUM THEME ELEVATION ───────────────────────── */
+/* ========================================================================= */
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin-slow {
+  animation: spinSlow 8s linear infinite;
+}
+
+.copilot-bullet-item {
+  margin-left: 14px;
+  list-style-type: disc;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+.copilot-line {
+  margin-bottom: 4px;
+}
+.copilot-line:last-child {
+  margin-bottom: 0;
+}
+
+/* Scrollbar refinement for Copilot chat */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.25);
+  border-radius: 9999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.45);
+}
+
+/* Global Premium Dark Theme Elevating Enhancements */
+.dark body {
+  background-color: #060913;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.08) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgba(14, 165, 233, 0.06) 0px, transparent 50%);
+  background-attachment: fixed;
+}
+
+.dark .panel,
+.dark .card,
+.dark .doc-workspace,
+.dark .equation-layout,
+.dark .quiz-layout,
+.dark .progress-overview,
+.dark .profile-layout {
+  border-color: rgba(56, 189, 248, 0.12) !important;
+  box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.5), 0 0 24px -12px rgba(56, 189, 248, 0.08);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.dark .panel:hover {
+  border-color: rgba(56, 189, 248, 0.22) !important;
+}
+
+.dark .topbar {
+  background: rgba(8, 12, 24, 0.85) !important;
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.14) !important;
+}
+
+.dark .sidebar {
+  background: rgba(8, 12, 24, 0.8) !important;
+  backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(56, 189, 248, 0.12) !important;
+}
+
+.dark .nav-item.active {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.18), rgba(99, 102, 241, 0.18)) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  color: #38bdf8 !important;
+  box-shadow: 0 0 16px -4px rgba(56, 189, 248, 0.3);
+}
+
+.dark .nav-item:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #e2e8f0 !important;
+}
+
+.dark .button-primary {
+  background: linear-gradient(135deg, #0284c7, #2563eb) !important;
+  box-shadow: 0 4px 16px -2px rgba(2, 132, 199, 0.4) !important;
+  transition: all 0.2s ease !important;
+}
+.dark .button-primary:hover {
+  background: linear-gradient(135deg, #0369a1, #1d4ed8) !important;
+  box-shadow: 0 6px 20px -2px rgba(2, 132, 199, 0.6) !important;
+  transform: translateY(-1px);
+}
