@@ -165,7 +165,27 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const remoteAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const lastSpeakingRef = useRef<boolean>(false);
 
-  const [rooms, setRooms] = useState<RoomItem[]>(DEFAULT_ROOMS);
+  const [rooms, setRooms] = useState<RoomItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('techai_all_rooms');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const merged = [...parsed];
+          DEFAULT_ROOMS.forEach(d => {
+            if (!merged.some(m => m.id === d.id)) merged.push(d);
+          });
+          return merged;
+        }
+      }
+    } catch {}
+    return DEFAULT_ROOMS;
+  });
+
+  const peerRef = useRef<any>(null);
+  const dataConnsRef = useRef<Map<string, any>>(new Map());
+  const activeCallsRef = useRef<Map<string, any>>(new Map());
+
   const [micEnabled, setMicEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -273,22 +293,47 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         if (data && data.room) {
           setRooms(prev => {
             if (prev.some(r => r.id === data.room.id)) return prev;
-            return [data.room, ...prev];
+            const updated = [data.room, ...prev];
+            try { localStorage.setItem('techai_all_rooms', JSON.stringify(updated)); } catch {}
+            return updated;
           });
         }
       });
 
       gs.on('roomDeleted', (data: any) => {
         if (data && data.roomId) {
-          setRooms(prev => prev.filter(r => r.id !== data.roomId));
+          setRooms(prev => {
+            const updated = prev.filter(r => r.id !== data.roomId);
+            try { localStorage.setItem('techai_all_rooms', JSON.stringify(updated)); } catch {}
+            return updated;
+          });
         }
       });
     } catch {
       // Socket not available
     }
 
+    // Sync room list across open tabs via BroadcastChannel
+    let bcSync: BroadcastChannel | null = null;
+    try {
+      bcSync = new BroadcastChannel('techai_rooms_sync');
+      bcSync.onmessage = (event) => {
+        if (event.data?.type === 'ROOM_CREATED' && event.data?.room) {
+          setRooms(prev => {
+            if (prev.some(r => r.id === event.data.room.id)) return prev;
+            const updated = [event.data.room, ...prev];
+            try { localStorage.setItem('techai_all_rooms', JSON.stringify(updated)); } catch {}
+            return updated;
+          });
+        }
+      };
+    } catch {}
+
     return () => {
       clearInterval(pollInterval);
+      if (bcSync) {
+        try { bcSync.close(); } catch {}
+      }
       if (globalSocketRef.current) {
         globalSocketRef.current.disconnect();
         globalSocketRef.current = null;
@@ -305,6 +350,13 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
   // Clean up all audio streams
   const stopAudio = useCallback(() => {
+    if (peerRef.current) {
+      try { peerRef.current.destroy(); } catch {}
+      peerRef.current = null;
+    }
+    dataConnsRef.current.clear();
+    activeCallsRef.current.clear();
+
     peerConnectionsRef.current.forEach((pc) => {
       try { pc.close(); } catch {}
     });
@@ -418,6 +470,226 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       console.warn('AudioAnalyser setup failed:', e);
     }
   };
+
+  // Play remote audio from a peer and monitor speaking level
+  const attachRemoteAudio = useCallback((peerId: string, remoteStream: MediaStream) => {
+    let audio = remoteAudioElementsRef.current.get(peerId);
+    if (!audio) {
+      audio = new Audio();
+      audio.autoplay = true;
+      (audio as any).playsInline = true;
+      remoteAudioElementsRef.current.set(peerId, audio);
+      audioContainerRef.current?.appendChild(audio);
+    }
+    audio.srcObject = remoteStream;
+    audio.play().catch(e => console.warn('P2P audio play policy:', e));
+
+    // Monitor remote audio volume to animate speaking indicator
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const source = ctx.createMediaStreamSource(remoteStream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const checkRemoteSpeaking = () => {
+        if (!audioContextRef.current) return;
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const isSpeakingRemote = (sum / dataArray.length) > 18;
+
+        setPeerParticipants(prev =>
+          prev.map(p => (p.socketId === peerId || p.id === peerId ? { ...p, isSpeaking: isSpeakingRemote } : p))
+        );
+        requestAnimationFrame(checkRemoteSpeaking);
+      };
+      requestAnimationFrame(checkRemoteSpeaking);
+    } catch {}
+  }, []);
+
+  // Setup PeerJS data connection for real-time chat & presence
+  const setupDataConnection = useCallback((conn: any) => {
+    conn.on('data', (data: any) => {
+      if (!data) return;
+      if (data.type === 'CHAT_MSG' && data.message) {
+        setChatMessages(prev => {
+          if (prev.some(m => m.id === data.message.id)) return prev;
+          return [...prev, data.message];
+        });
+      } else if (data.type === 'SPEAKING_UPDATE') {
+        const { userName: senderName, isSpeaking: peerSpeaking } = data;
+        if (senderName && senderName !== effectiveUserName) {
+          setPeerParticipants(prev => {
+            const exists = prev.find(p => p.name === senderName);
+            if (exists) {
+              return prev.map(p => (p.name === senderName ? { ...p, isSpeaking: peerSpeaking } : p));
+            }
+            return [
+              ...prev,
+              {
+                name: senderName,
+                initials: senderName.slice(0, 2).toUpperCase(),
+                role: peerSpeaking ? 'Speaking' : 'Stage Member',
+                color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+                isSpeaking: peerSpeaking,
+                socketId: conn.peer,
+              }
+            ];
+          });
+        }
+      } else if (data.type === 'JOIN') {
+        const { userName: newGuestName, userId: newGuestId } = data;
+        if (newGuestName && newGuestName !== effectiveUserName) {
+          setPeerParticipants(prev => {
+            if (prev.some(p => p.name === newGuestName)) return prev;
+            return [
+              ...prev,
+              {
+                name: newGuestName,
+                initials: newGuestName.slice(0, 2).toUpperCase(),
+                role: 'Stage Member',
+                color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+                isSpeaking: false,
+                socketId: conn.peer,
+                id: newGuestId,
+              }
+            ];
+          });
+          showToast(`👋 ${newGuestName} joined the room! You are talking together live.`);
+        }
+      }
+    });
+
+    conn.on('close', () => {
+      dataConnsRef.current.delete(conn.peer);
+      const audio = remoteAudioElementsRef.current.get(conn.peer);
+      if (audio) {
+        audio.srcObject = null;
+        audio.remove();
+        remoteAudioElementsRef.current.delete(conn.peer);
+      }
+      setPeerParticipants(prev => prev.filter(p => p.socketId !== conn.peer && p.id !== conn.peer));
+    });
+  }, [effectiveUserName]);
+
+  // Connect to Host Peer (when joining as guest)
+  const connectToHostPeer = useCallback((hostPeerId: string) => {
+    const peer = peerRef.current;
+    if (!peer || peer.destroyed) return;
+
+    // Call host with local microphone stream
+    const localStream = mediaStreamRef.current;
+    if (localStream) {
+      try {
+        const call = peer.call(hostPeerId, localStream);
+        if (call) {
+          activeCallsRef.current.set(hostPeerId, call);
+          call.on('stream', (remoteStream: MediaStream) => {
+            attachRemoteAudio(hostPeerId, remoteStream);
+          });
+        }
+      } catch (e) {
+        console.warn('PeerJS call host error:', e);
+      }
+    }
+
+    // Connect data channel for live text chat & presence
+    try {
+      const conn = peer.connect(hostPeerId);
+      if (conn) {
+        setupDataConnection(conn);
+        conn.on('open', () => {
+          dataConnsRef.current.set(hostPeerId, conn);
+          conn.send({
+            type: 'JOIN',
+            userId: effectiveUserId,
+            userName: effectiveUserName,
+          });
+        });
+      }
+    } catch (e) {
+      console.warn('PeerJS data connect host error:', e);
+    }
+  }, [attachRemoteAudio, setupDataConnection, effectiveUserId, effectiveUserName]);
+
+  // Initialize PeerJS for Room
+  const initPeerJS = useCallback((roomId: string, isHostRole: boolean) => {
+    const PeerConstructor = (window as any).Peer;
+    if (!PeerConstructor) {
+      console.warn('PeerJS is not yet loaded from script tag');
+      return;
+    }
+
+    if (peerRef.current) {
+      try { peerRef.current.destroy(); } catch {}
+      peerRef.current = null;
+    }
+
+    const cleanRoomId = roomId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const myPeerId = isHostRole
+      ? `techai_${cleanRoomId}_host`
+      : `techai_${cleanRoomId}_peer_${Math.random().toString(36).substring(2, 7)}`;
+    const hostPeerId = `techai_${cleanRoomId}_host`;
+
+    try {
+      const peer = new PeerConstructor(myPeerId, {
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' },
+          ]
+        }
+      });
+      peerRef.current = peer;
+
+      peer.on('open', (id: string) => {
+        console.log('PeerJS node active with ID:', id);
+        setConnectionStatus('connected');
+
+        if (!isHostRole) {
+          setTimeout(() => {
+            connectToHostPeer(hostPeerId);
+          }, 600);
+        }
+      });
+
+      // Handle incoming voice call from peer
+      peer.on('call', (call: any) => {
+        activeCallsRef.current.set(call.peer, call);
+        const localStream = mediaStreamRef.current;
+        call.answer(localStream);
+        call.on('stream', (remoteStream: MediaStream) => {
+          attachRemoteAudio(call.peer, remoteStream);
+        });
+      });
+
+      // Handle incoming data connection
+      peer.on('connection', (conn: any) => {
+        dataConnsRef.current.set(conn.peer, conn);
+        setupDataConnection(conn);
+      });
+
+      peer.on('error', (err: any) => {
+        console.warn('PeerJS event:', err.type, err.message);
+        if (err.type === 'unavailable-id' && isHostRole) {
+          const fallbackId = `techai_${cleanRoomId}_host_${Math.random().toString(36).substring(2, 5)}`;
+          try {
+            const p2 = new PeerConstructor(fallbackId, {
+              config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+            });
+            peerRef.current = p2;
+          } catch {}
+        }
+      });
+    } catch (e) {
+      console.warn('PeerJS init failed:', e);
+    }
+  }, [connectToHostPeer, attachRemoteAudio, setupDataConnection]);
 
   // Create or retrieve an RTCPeerConnection for a peer
   const createPeerConnection = useCallback((targetSocketId: string) => {
@@ -897,10 +1169,10 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
   }, [effectiveUserId, effectiveUserName, createPeerConnection]);
 
-  // Send chat message
+  // Send chat message with triple redundancy (Local State + PeerJS DataConnection + BroadcastChannel + Socket.IO)
   const sendChatMessage = () => {
     const msg = chatInput.trim();
-    if (!msg || !socketRef.current || !currentRoom || !chatEnabled) return;
+    if (!msg || !currentRoom || !chatEnabled) return;
 
     // Rate limiting: max 1 message per 500ms
     const now = Date.now();
@@ -919,16 +1191,39 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       timestamp: new Date().toISOString(),
     };
 
-    socketRef.current.emit('chatMessage', {
-      roomId: currentRoom.id,
-      userId: effectiveUserId,
-      userName: effectiveUserName,
-      ...chatMsg,
-      sender: effectiveUserName,
-    });
-
+    // 1. Append locally
     setChatMessages(prev => [...prev, chatMsg]);
     setChatInput('');
+
+    // 2. Broadcast via BroadcastChannel (for same device multi-tab testing)
+    try {
+      broadcastChannelRef.current?.postMessage({
+        type: 'CHAT_MSG',
+        message: chatMsg,
+      });
+    } catch {}
+
+    // 3. Broadcast via PeerJS DataConnections (over the internet to friends)
+    try {
+      dataConnsRef.current.forEach(conn => {
+        try {
+          conn.send({ type: 'CHAT_MSG', message: chatMsg });
+        } catch {}
+      });
+    } catch {}
+
+    // 4. Send via Socket.IO if backend is connected
+    if (socketRef.current) {
+      try {
+        socketRef.current.emit('chatMessage', {
+          roomId: currentRoom.id,
+          userId: effectiveUserId,
+          userName: effectiveUserName,
+          ...chatMsg,
+          sender: effectiveUserName,
+        });
+      } catch {}
+    }
   };
 
   // Host control actions
@@ -1006,8 +1301,15 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const url = new URL(window.location.href);
       url.searchParams.set('module', 'voiceroom');
       url.searchParams.set('room', room.id);
+      url.searchParams.set('name', room.name);
+      url.searchParams.set('host', room.host);
+      url.searchParams.set('cat', room.category);
       window.history.replaceState({}, '', url.toString());
     } catch {}
+
+    // Initialize direct PeerJS WebRTC P2P mesh
+    const isHostRole = room.host === effectiveUserName || room.created === true || userName === room.host;
+    initPeerJS(room.id, isHostRole);
 
     // Load chat history
     loadChatHistory(room.id);
@@ -1023,7 +1325,13 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const bc = new BroadcastChannel(`voiceroom_${room.id}`);
       broadcastChannelRef.current = bc;
       bc.onmessage = (event) => {
-        const { type, userName: senderName, isSpeaking: peerSpeaking } = event.data || {};
+        const { type, message, userName: senderName, isSpeaking: peerSpeaking } = event.data || {};
+        if (type === 'CHAT_MSG' && message) {
+          setChatMessages(prev => {
+            if (prev.some(m => m.id === message.id)) return prev;
+            return [...prev, message];
+          });
+        }
         if (type === 'SPEAKING_UPDATE' && senderName && senderName !== effectiveUserName) {
           setPeerParticipants(prev => {
             const exists = prev.find(p => p.name === senderName);
@@ -1117,31 +1425,66 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const targetId = hashParams.get('room') || queryParams.get('room') || queryParams.get('voiceroom');
 
       if (targetId && !currentRoomRef.current) {
-        // Always fetch from API to avoid stale closure issues — this also works for WhatsApp link joins
         let roomToJoin: RoomItem | undefined;
+
+        // 1. Check local storage and default rooms
+        const allLocalRooms: RoomItem[] = (() => {
+          try {
+            return JSON.parse(localStorage.getItem('techai_all_rooms') || '[]');
+          } catch {
+            return [];
+          }
+        })();
+
+        const match = allLocalRooms.find(r => r.id === targetId) || DEFAULT_ROOMS.find(r => r.id === targetId);
+        if (match) {
+          roomToJoin = match;
+        } else {
+          // 2. Extract metadata from invite URL parameters
+          const urlName = queryParams.get('name') || hashParams.get('name');
+          const urlHost = queryParams.get('host') || hashParams.get('host');
+          const urlCat = queryParams.get('cat') || hashParams.get('cat');
+
+          roomToJoin = {
+            id: targetId,
+            name: urlName ? decodeURIComponent(urlName) : `Live Voice Room (${targetId.slice(0, 8)})`,
+            category: urlCat ? decodeURIComponent(urlCat) : 'Language Practice',
+            host: urlHost ? decodeURIComponent(urlHost) : 'Room Host',
+            initials: (urlHost ? decodeURIComponent(urlHost) : 'RH').slice(0, 2).toUpperCase(),
+            count: 2,
+            capacity: 12,
+            access: 'Public',
+            approval: false,
+            description: 'Live voice conversation session with friends',
+            color: 'linear-gradient(135deg,#8b82ff,#56b5e9)',
+            live: true,
+          };
+        }
+
+        // Try backend API in background to enrich if available
         try {
           const res = await fetch(`/api/voicerooms/${encodeURIComponent(targetId)}`);
           if (res.ok && isMounted) {
             const data = await res.json();
             if (data.success && data.room) {
-              roomToJoin = data.room;
-              setRooms(prev => {
-                if (prev.some(r => r.id === data.room.id)) return prev;
-                return [data.room, ...prev];
-              });
+              roomToJoin = { ...roomToJoin, ...data.room };
             }
           }
-        } catch {
-          // Room lookup failed — try local state snapshot (captured at effect creation time)
-        }
+        } catch {}
 
         if (roomToJoin && isMounted) {
+          // Persist so it is visible in All Voice Rooms
+          setRooms(prev => {
+            const updated = [roomToJoin!, ...prev.filter(r => r.id !== roomToJoin!.id)];
+            try { localStorage.setItem('techai_all_rooms', JSON.stringify(updated)); } catch {}
+            return updated;
+          });
           openRoom(roomToJoin, true);
         }
       }
     };
 
-    // If we have an active room stored from before (host returning after sharing WhatsApp), restore it
+    // If host has an active session from before (e.g. returning after WhatsApp share or refresh), restore it
     const restoreSaved = async () => {
       if (currentRoomRef.current) return; // Already in a room
       const queryParams = new URLSearchParams(window.location.search);
@@ -1153,19 +1496,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         if (saved) {
           const savedRoom = JSON.parse(saved);
           if (savedRoom && savedRoom.id && isMounted) {
-            // Verify the room still exists on the backend
-            const res = await fetch(`/api/voicerooms/${encodeURIComponent(savedRoom.id)}`);
-            if (res.ok && isMounted) {
-              const data = await res.json();
-              if (data.success && data.room) {
-                openRoom({ ...savedRoom, ...data.room, created: savedRoom.created }, false);
-                return;
-              }
-            }
-            // If backend doesn't know the room, still re-enter (works if server restarted)
-            if (isMounted) {
-              openRoom(savedRoom, false);
-            }
+            openRoom(savedRoom, false);
           }
         }
       } catch {}
@@ -1260,13 +1591,25 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       }
     } catch {}
 
-    setRooms(prev => [roomToOpen, ...prev.filter(r => r.id !== roomToOpen.id)]);
+    setRooms(prev => {
+      const updated = [roomToOpen, ...prev.filter(r => r.id !== roomToOpen.id)];
+      try { localStorage.setItem('techai_all_rooms', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+
+    // Broadcast creation to all open tabs so it appears in All Rooms everywhere
+    try {
+      const bcSync = new BroadcastChannel('techai_rooms_sync');
+      bcSync.postMessage({ type: 'ROOM_CREATED', room: roomToOpen });
+      setTimeout(() => bcSync.close(), 1000);
+    } catch {}
+
     setCreateModalOpen(false);
     setFormName('');
     setFormDesc('');
     setActiveFilter('All');
     openRoom(roomToOpen, true);
-    showToast('🎉 Room created! You are on stage. Invite friends now!');
+    showToast('🎉 Room created! You are live on stage. Share invite link now!');
   };
 
   // Join by link form handler
@@ -1275,15 +1618,39 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     const raw = joinUrlInput.trim();
     try {
       let id = raw;
+      let urlName: string | null = null;
+      let urlHost: string | null = null;
+      let urlCat: string | null = null;
+
       if (raw.includes('http://') || raw.includes('https://') || raw.includes('#') || raw.includes('?')) {
         const u = new URL(raw, window.location.origin);
         const hashParams = new URLSearchParams(u.hash.replace(/^#/, ''));
         id = hashParams.get('room') || u.searchParams.get('room') || u.searchParams.get('voiceroom') || id;
+        urlName = u.searchParams.get('name') || hashParams.get('name');
+        urlHost = u.searchParams.get('host') || hashParams.get('host');
+        urlCat = u.searchParams.get('cat') || hashParams.get('cat');
       }
 
       let found = rooms.find(r => r.id === id || r.name.toLowerCase() === id.toLowerCase());
       setJoinModalOpen(false);
       setJoinUrlInput('');
+
+      if (!found && urlName) {
+        found = {
+          id,
+          name: decodeURIComponent(urlName),
+          category: urlCat ? decodeURIComponent(urlCat) : 'Language Practice',
+          host: urlHost ? decodeURIComponent(urlHost) : 'Host',
+          initials: (urlHost ? decodeURIComponent(urlHost) : 'H').slice(0, 2).toUpperCase(),
+          count: 2,
+          capacity: 12,
+          access: 'Public',
+          approval: false,
+          description: 'Live voice room with host',
+          color: 'linear-gradient(135deg,#8b82ff,#56b5e9)',
+          live: true,
+        };
+      }
 
       if (!found) {
         // Attempt backend lookup
@@ -1306,16 +1673,24 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       if (found.approval) {
         showToast('Host approval required to join this room.');
       }
-      openRoom(found);
+      openRoom(found, true);
     } catch {
       showToast('Please enter a valid invitation link or room ID.');
     }
   };
 
-  // Invite link generation
+  // Invite link generation with complete room metadata for 100% reliable auto-join
   const getInviteUrl = () => {
     const base = window.location.origin + window.location.pathname;
-    return `${base}?module=voiceroom&room=${encodeURIComponent(currentRoom?.id || 'demo-english')}`;
+    const r = currentRoom;
+    if (!r) return `${base}?module=voiceroom&room=demo-english`;
+    const params = new URLSearchParams();
+    params.set('module', 'voiceroom');
+    params.set('room', r.id);
+    params.set('name', r.name);
+    params.set('host', r.host);
+    params.set('cat', r.category);
+    return `${base}?${params.toString()}`;
   };
 
   const getInviteMessage = () => {
@@ -1646,6 +2021,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                   <button
                     type="button"
                     className="vr-secondary"
+                    onClick={copyInviteLink}
+                    title="Copy direct invite link to clipboard"
+                  >
+                    ▣ Copy Link
+                  </button>
+                  <button
+                    type="button"
+                    className="vr-secondary"
                     onClick={() => setInviteModalOpen(true)}
                   >
                     ↗ Invite friends
@@ -1659,6 +2042,34 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                   </button>
                 </div>
               </div>
+
+              {/* Live Stage Status Banner */}
+              {isHost && peerParticipants.length === 0 ? (
+                <div className="vr-waiting-banner">
+                  <span className="vr-live-dot" />
+                  <span className="vr-banner-text">
+                    <b>You are live on stage as Host.</b> Waiting for friends to join — copy your link and share it on WhatsApp!
+                  </span>
+                  <div className="vr-banner-actions">
+                    <button type="button" onClick={copyInviteLink} className="vr-copy-pill">
+                      ▣ Copy Link
+                    </button>
+                    <button type="button" onClick={shareOnWhatsApp} className="vr-wa-pill">
+                      💬 WhatsApp
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="vr-active-banner">
+                  <span className="vr-live-dot active" />
+                  <span className="vr-banner-text">
+                    <b>Live Stage Active!</b> {peerParticipants.length + 1} participant{peerParticipants.length > 0 ? 's' : ''} on stage. Speak freely through your microphone.
+                  </span>
+                  <button type="button" onClick={copyInviteLink} className="vr-copy-pill">
+                    + Invite more
+                  </button>
+                </div>
+              )}
 
               {/* Two-column layout: Participants + Chat */}
               <div className="vr-roomview-layout">

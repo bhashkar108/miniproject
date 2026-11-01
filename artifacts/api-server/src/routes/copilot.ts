@@ -102,7 +102,91 @@ function getLocalFallbackResponse(
 ): { reply: string; navigateTo?: string } {
   const lower = message.toLowerCase();
   const navTarget = detectNavigationIntent(lower);
-  const isHindi = language.startsWith("hi") || /[क-ह]/.test(message) || /(kaha|kaise|karo|batao|kholo|jaana|madad)/i.test(lower);
+  const isHindi = language.startsWith("hi") || /[क-ह]/.test(message) || /(kaha|kaise|karo|batao|kholo|jaana|madad|kya|tarika|step)/i.test(lower);
+
+  // Voice Rooms in-depth answer
+  if (navTarget === "voiceroom" || /voice\s*room|audio\s*room|stage|whatsapp|call|dost|friend|mic/i.test(lower)) {
+    if (isHindi) {
+      return {
+        reply: `### 🎙️ **Student Voice Rooms (स्टूडेंट वॉइस रूम्स)**\n\nयह फीचर दोस्तों के साथ लाइव ऑडियो कॉल और ग्रुप स्टडी के लिए है। इसमें रियल-टाइम WebRTC माइक्रोफ़ोन ऑडियो और लाइव टेक्स्ट चैट है।\n\n#### ⚙️ **स्टेप-बाय-स्टेप कैसे इस्तेमाल करें:**\n1. **"＋ Create Room"** पर क्लिक करें, रूम का नाम, विषय और क्षमता चुनें।\n2. आप तुरंत **स्टेज पर लाइव** आ जाएंगे और आपका माइक ऑन हो जाएगा।\n3. **"Share on WhatsApp"** या **"Copy link"** पर क्लिक करें। आप खुद रूम में बने रहेंगे।\n4. जब आपका दोस्त लिंक पर क्लिक करेगा, वह **सीधे आपके रूम में स्टेज पर** आ जाएगा।\n5. आप दोनों लाइव माइक से बात कर सकते हैं और चैट पैनल से मैसेज भी भेज सकते हैं!\n\n💡 **टिप:** लिंक शेयर करने के बाद आप स्टेज पर रहकर आराम से दोस्तों के जुड़ने का इंतजार करें।`,
+        navigateTo: "voiceroom",
+      };
+    }
+    return {
+      reply: `### 🎙️ **Student Voice Rooms**\n\nReal-time multi-user audio calling rooms for collaborative learning. Features WebRTC live voice, WhatsApp invite links, and in-room chat.\n\n#### ⚙️ **Step-by-Step Guide:**\n1. Click **"＋ Create Room"**, enter room title, category, and capacity.\n2. You immediately land **on stage with mic active**.\n3. Click **"Share on WhatsApp"** or **"Copy link"** — you remain on stage waiting for friends.\n4. When your friend clicks the link, they **land directly on stage with you**.\n5. Speak freely via microphone and chat in real-time!\n\n💡 **Pro Tip:** You do not leave the room when sharing the invite link.`,
+      navigateTo: "voiceroom",
+    };
+  }
+
+  // Smart Doc in-depth answer
+  if (navTarget === "docs" || /doc|scan|compress|camera|rotate|crop|घूमा|साइज|100kb|200kb/i.test(lower)) {
+    if (isHindi) {
+      return {
+        reply: `### 📄 **Smart Doc (स्मार्ट डॉक)**\n\nफॉर्म भरने और कॉलेज एडमिशन के लिए डॉक्यूमेंट स्कैनर, 90° रोटेटर और टारगेट KB साइज कंप्रेसर।\n\n#### ⚙️ **स्टेप-बाय-स्टेप कैसे इस्तेमाल करें:**\n1. **"Camera preview"** से लाइव फोटो लें या फाइल अपलोड करें।\n2. **"Rotate 90°"** बटन दबाकर जितनी बार चाहें फोटो को सही दिशा में घुमाएं।\n3. **"Crop"** स्लाइडर से अनचाहे किनारे काटें।\n4. **"Compress to target size"** स्लाइडर से आवश्यक साइज (उदा. 100 KB या 200 KB) सेट करें।\n5. **"Create processed copy"** बटन पर क्लिक करें — रोटेशन, क्रॉप और कंप्रेशन सब एक साथ लागू हो जाएंगे।\n6. ओरिजिनल और प्रोसेस साइज देखकर **"Download"** से सेव करें!`,
+        navigateTo: "docs",
+      };
+    }
+    return {
+      reply: `### 📄 **Smart Doc**\n\nDocument capture, 90° rotation, crop, and file compressor (50KB to 500KB) tailored for admissions and exam portals.\n\n#### ⚙️ **Step-by-Step Guide:**\n1. Capture a photo via live camera or upload an existing file.\n2. Click **"Rotate 90°"** repeatedly until properly oriented.\n3. Adjust the **"Crop"** slider to remove unwanted borders.\n4. Set the **"Compress to target size"** slider to your target KB.\n5. Click **"Create processed copy"** to apply all adjustments simultaneously.\n6. Compare file sizes and click **"Download"**!`,
+      navigateTo: "docs",
+    };
+  }
+
+  // English Practice in-depth answer
+  if (navTarget === "voice" || /english|speaking|orb|practice|voice\s*studio|bolna|अंग्रेजी/i.test(lower)) {
+    if (isHindi) {
+      return {
+        reply: `### 🗣️ **English Practice & Voice Studio (इंग्लिश प्रैक्टिस)**\n\n3D स्काई ऑर्ब के साथ लाइव बोलचाल का अभ्यास। हर सवाल पर डायनामिक 3-लेवल रिप्लाई लाइन्स अपने आप तैयार होती हैं।\n\n#### ⚙️ **स्टेप-बाय-स्टेप कैसे इस्तेमाल करें:**\n1. अपनी भाषा और स्तर (**Beginner, Intermediate, Advanced**) चुनें।\n2. बातचीत का विषय चुनें या **"Custom Topic"** में अपनी पसंद का विषय लिखें।\n3. AI आपसे बोलकर सवाल पूछेगा।\n4. सवाल के नीचे तुरंत उस सवाल के अनुसार **3 रेडीमेड उत्तर** दिखेंगे — "Use reply" से उपयोग करें या उच्चारण सुनें।\n5. माइक बटन दबाकर मुंह से बोलें — हर सवाल के बाद नए रिप्लाई अपने आप जनरेट होंगे ताकि बातचीत का फ्लो न टूटे!`,
+        navigateTo: "voice",
+      };
+    }
+    return {
+      reply: `### 🗣️ **English Practice Studio**\n\nReal-time spoken language partner with animated sky orb and dynamic reply suggestions tailored for every question.\n\n#### ⚙️ **Step-by-Step Guide:**\n1. Choose your language and level (**Beginner, Intermediate, Advanced**).\n2. Select a topic or type a custom subject.\n3. Listen to the AI speak its question.\n4. Dynamic reply lines appear immediately under the orb for your chosen level.\n5. Speak via microphone — for every answer, AI generates continuous follow-ups and fresh suggestions!`,
+      navigateTo: "voice",
+    };
+  }
+
+  // AI Teacher in-depth answer
+  if (navTarget === "teacher" || /teacher|notes|study|pdf|explain|टीचर|नोट्स/i.test(lower)) {
+    if (isHindi) {
+      return {
+        reply: `### 📚 **AI Teacher (AI टीचर)**\n\nकिसी भी नोट्स या PDF को बोलकर 25+ भाषाओं में आसान शब्दों में समझाने वाला स्मार्ट ट्यूटर।\n\n#### ⚙️ **स्टेप-बाय-स्टेप कैसे इस्तेमाल करें:**\n1. अपने नोट्स पेस्ट करें या PDF फाइल अपलोड करें।\n2. समझाने की भाषा (हिंदी, इंग्लिश आदि) और ऑडियो स्पीड चुनें।\n3. **"Teach Lesson"** पर क्लिक करें — AI मुख्य बिंदु और सरल उदाहरण तैयार करेगा।\n4. AI बोलकर समझाएगा और बोले जाने वाले शब्द स्क्रीन पर हाईलाइट होंगे।\n5. माइक बटन दबाकर मुंह से कोई भी सवाल पूछें — AI तुरंत उत्तर देगा!`,
+        navigateTo: "teacher",
+      };
+    }
+    return {
+      reply: `### 📚 **AI Teacher**\n\nPersonal AI educator that explains your PDFs and study notes in 25+ languages with synchronized spoken voice.\n\n#### ⚙️ **Step-by-Step Guide:**\n1. Paste notes or upload a textbook PDF.\n2. Choose your explanation language and speech rate.\n3. Click **"Teach Lesson"** for chapter takeaways and analogies.\n4. Listen as AI explains with synchronized highlighting.\n5. Tap the mic to ask voice follow-up questions hands-free!`,
+      navigateTo: "teacher",
+    };
+  }
+
+  // Auto Quiz in-depth answer
+  if (navTarget === "quiz" || /quiz|test|solve|question|mcq|क्विज|सवाल/i.test(lower)) {
+    if (isHindi) {
+      return {
+        reply: `### 🧠 **Auto Quiz (ऑटो क्विज)**\n\nवर्कशीट सॉल्व करने और गलत उत्तरों पर AI से चर्चा करने का टूल।\n\n#### ⚙️ **स्टेप-बाय-स्टेप कैसे इस्तेमाल करें:**\n1. अपनी क्विज वर्कशीट अपलोड करें — दाईं तरफ तुरंत सभी सवाल दिखेंगे।\n2. **"Start Practice"** दबाएं और एक-एक करके सवाल हल करें।\n3. गलत उत्तर होने पर **"💬 Discuss this question with AI"** बटन दबाएं — AI पूरा कारण समझाएगा।\n4. सभी सवालों के एक साथ उत्तर पाने के लिए **"Auto Solve All"** पर क्लिक करें।`,
+        navigateTo: "quiz",
+      };
+    }
+    return {
+      reply: `### 🧠 **Auto Quiz**\n\nInteractive worksheet practice and solver with instant question preview and step-by-step reasoning.\n\n#### ⚙️ **Step-by-Step Guide:**\n1. Upload your quiz worksheet — questions appear instantly in the right panel.\n2. Click **"Start Practice"** to answer questions one by one.\n3. If you get a question wrong, tap **"💬 Discuss this question with AI"** for an explanation.\n4. Use **"Auto Solve All"** to quickly solve all questions with full explanations.`,
+      navigateTo: "quiz",
+    };
+  }
+
+  // Equation Graph in-depth answer
+  if (navTarget === "equations" || /equation|graph|math|curve|plot|x=0|समीकरण|ग्राफ/i.test(lower)) {
+    if (isHindi) {
+      return {
+        reply: `### 📈 **Equation Graph (इक्वेशन ग्राफ)**\n\n2D गणितीय ग्राफ प्लॉटर और इंटरसेक्शन निकालने का टूल।\n\n#### ⚙️ **स्टेप-बाय-स्टेप कैसे इस्तेमाल करें:**\n1. इनपुट बॉक्स में कोई भी समीकरण लिखें, जैसे \`y = x^2 - 4\`, \`y = 2*x + 1\`, या \`x = 0\`।\n2. ग्राफ तुरंत 2D प्लेन पर ड्रा हो जाएगा।\n3. इंटरसेक्शन पॉइंट्स (X, Y) अपने आप कैलकुलेट होकर दिखेंगे।\n4. **"Upload equation photo"** से फोटो अपलोड करके OCR से समीकरण निकाल सकते हैं।`,
+        navigateTo: "equations",
+      };
+    }
+    return {
+      reply: `### 📈 **Equation Graph**\n\n2D Cartesian curve plotter with automatic intersection calculation and OCR math scanning.\n\n#### ⚙️ **Step-by-Step Guide:**\n1. Type equations such as \`y = x^2 - 4\` or vertical lines like \`x = 0\`.\n2. Curves plot live on the 2D Cartesian plane.\n3. Intersection coordinates are calculated and listed automatically.\n4. Upload photos of handwritten math formulas to auto-extract equations via OCR.`,
+      navigateTo: "equations",
+    };
+  }
 
   if (navTarget) {
     const mod = MODULE_DESCRIPTIONS[navTarget];

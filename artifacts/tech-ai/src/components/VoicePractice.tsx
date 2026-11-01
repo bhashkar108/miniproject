@@ -605,29 +605,241 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
     return () => clearTimeout(t);
   }, [messages, orbState]);
 
+  // Intelligent dynamic reply generator that produces 3 level-tailored replies for EVERY question
+  const generateUniversalSuggestions = (questionText: string, langKey: string = practiceLang): LevelReplies => {
+    const q = (questionText || '').toLowerCase();
+    const isHindi = langKey.startsWith('hi');
+    const isSpanish = langKey.startsWith('es');
+    const isFrench = langKey.startsWith('fr');
+    const isGerman = langKey.startsWith('de');
+    const isJapanese = langKey.startsWith('ja');
+
+    // 1. Food / Cooking / Dishes / Dining
+    if (/food|dish|cook|eat|recipe|meal|lunch|dinner|breakfast|खाना|व्यंजन|पकाना|भोजन|comida|receta|manger|plat|essen|料理|食べ物/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'मेरा पसंदीदा खाना दाल-चावल और पनीर है, जो मुझे बहुत स्वादिष्ट लगता है।',
+          Intermediate: 'मुझे घर का बना पौष्टिक खाना पसंद है, विशेषकर जब वह पारंपरिक मसालों और ताजी सब्जियों से बना हो।',
+          Advanced: 'व्यंजनों के मामले में, मैं विविध क्षेत्रीय स्वादों और पारंपरिक मसालों से युक्त संतुलित पौष्टिक आहार को अत्यधिक महत्व देता हूँ।'
+        };
+      }
+      if (isSpanish) {
+        return {
+          Beginner: 'Mi comida favorita es la pasta y me gusta la comida casera.',
+          Intermediate: 'Disfruto mucho de los platos tradicionales preparados con ingredientes frescos y especias aromáticas.',
+          Advanced: 'Desde una perspectiva culinaria, valoro profundamente la gastronomía regional auténtica y la fusión de sabores.'
+        };
+      }
+      return {
+        Beginner: 'My favorite food is chicken biryani and I really enjoy fresh homemade meals.',
+        Intermediate: 'I really love traditional homemade dishes, especially when prepared with aromatic spices and fresh ingredients.',
+        Advanced: 'From a culinary standpoint, I have a deep appreciation for authentic regional cuisine and wholesome, balanced flavors.'
+      };
+    }
+
+    // 2. Travel / Places / Cities / Countries / Tourism
+    if (/travel|trip|place|city|country|visit|destination|holiday|vacation|घूमना|यात्रा|सफर|शहर|देश|viajar|viaje|voyager|voyage|reisen|旅行/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'मुझे प्राकृतिक स्थलों और सुंदर पहाड़ों में घूमना बहुत पसंद है।',
+          Intermediate: 'मेरा सपना है कि मैं ऐतिहासिक धरोहरों का भ्रमण कर स्थानीय संस्कृति और जीवनशैली को करीब से जानूँ।',
+          Advanced: 'यात्राएं हमारी सोच को व्यापक बनाती हैं; मैं समृद्ध सांस्कृतिक धरोहरों की खोज कर विविधता को गहराई से समझना चाहता हूँ।'
+        };
+      }
+      return {
+        Beginner: 'I would love to travel to mountain hill stations and explore scenic landscapes.',
+        Intermediate: 'My dream destination is exploring historical cities and experiencing distinct local cultures and traditions.',
+        Advanced: 'Traveling enriches my worldview, allowing me to immerse myself in diverse heritage landscapes and cultivate cross-cultural empathy.'
+      };
+    }
+
+    // 3. Interview / Introduction / Career / Ambition / Strengths
+    if (/interview|introduce|yourself|career|job|strength|ambition|goal|work|भविष्य|करियर|परिचय|ताकत|लक्ष्य|entrevista|carrera|entretien|beruf|面接|仕事/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'मैं एक उत्साही छात्र हूँ और तकनीक के क्षेत्र में अपना भविष्य संवारना चाहता हूँ।',
+          Intermediate: 'मुझमें समस्याओं को हल करने की मजबूत क्षमता है और मैं सॉफ्टवेयर विकास में व्यावहारिक ज्ञान प्राप्त कर रहा हूँ।',
+          Advanced: 'मेरी कार्यशैली विश्लेषणात्मक चिंतन और सतत सीखने की प्रतिबद्धता पर आधारित है, जिसका उद्देश्य प्रभावकारी तकनीकी समाधान गढ़ना है।'
+        };
+      }
+      return {
+        Beginner: 'I am a passionate student eager to learn and build a meaningful career in technology.',
+        Intermediate: 'I have strong problem-solving skills, and I am focused on mastering software development to build impactful solutions.',
+        Advanced: 'I combine analytical rigor with a proactive learning mindset, dedicated to architecting scalable systems and driving innovation.'
+      };
+    }
+
+    // 4. Friends / Family / Relationships / Best Friend
+    if (/friend|friendship|family|relationship|people|दोस्त|मित्र|दोस्ती|परिवार|रिश्ते|amigo|amitié|familie|友達|家族/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'सच्चे दोस्त में ईमानदारी, समझदारी और भरोसा सबसे महत्वपूर्ण गुण हैं।',
+          Intermediate: 'एक सच्चा मित्र वही है जो मुश्किल समय में साथ दे और हमें हमेशा आगे बढ़ने के लिए प्रेरित करे।',
+          Advanced: 'सच्ची मित्रता का मूल आधार निस्वार्थ विश्वास, वैचारिक तालमेल और बिना किसी शर्त के एक-दूसरे के आत्मसम्मान का आदर करना है।'
+        };
+      }
+      return {
+        Beginner: 'In a true friend, I value honesty, mutual support, and kindness the most.',
+        Intermediate: 'A genuine friend is someone who stands by you through challenges and constantly encourages you to grow.',
+        Advanced: 'Mutual trust, intellectual transparency, and unwavering emotional dependability are the foundational tenets of enduring relationships.'
+      };
+    }
+
+    // 5. Entertainment / Movies / Cinema / Music / Books
+    if (/movie|cinema|film|music|song|book|read|actor|singer|फिल्म|सिनेमा|गाना|संगीत|किताब|película|música|livre|musique|buch|映画|音楽/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'खाली समय में मुझे प्रेरणादायक किताबें पढ़ना और मधुर संगीत सुनना पसंद है।',
+          Intermediate: 'संगीत और विचारोत्तेजक फिल्में मुझे मानसिक शांति देती हैं और नए रचनात्मक दृष्टिकोण प्रदान करती हैं।',
+          Advanced: 'उत्कृष्ट साहित्य और सिनेमा मानव स्वभाव, सामाजिक वास्तविकताओं और दार्शनिक पहलुओं को समझने का अद्भुत माध्यम हैं।'
+        };
+      }
+      return {
+        Beginner: 'I love listening to uplifting music and watching science fiction and comedy movies.',
+        Intermediate: 'Music and insightful books help me unwind, especially stories with intriguing plotlines and memorable characters.',
+        Advanced: 'I appreciate literature and cinematic works that convey nuanced thematic depth, sparking thoughtful reflection on human resilience.'
+      };
+    }
+
+    // 6. Routine / Daily life / Morning / Time of day / Weekend
+    if (/morning|evening|night|day|routine|weekend|today|time|दिन|सुबह|शाम|दिनचर्या|सप्ताहांत|mañana|día|matin|journée|morgen|tag|朝|日常/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'मुझे सुबह का समय बहुत पसंद है क्योंकि वातावरण शांत और सुखद रहता है।',
+          Intermediate: 'दिन का सबसे अच्छा समय सुबह का होता है, जब मैं बिना किसी व्यवधान के अपने दिन की योजना बना सकता हूँ।',
+          Advanced: 'अनुशासित दिनचर्या और प्रातःकालीन आत्ममंथन मानसिक स्पष्टता और दिनभर की कार्यकुशलता बनाए रखने की मजबूत नींव हैं।'
+        };
+      }
+      return {
+        Beginner: 'My favorite time is the morning because the atmosphere is peaceful, quiet, and fresh.',
+        Intermediate: 'I find peaceful mornings ideal for setting priorities, which establishes a productive tone for the entire day.',
+        Advanced: 'Structured daily habits coupled with deliberate morning reflection allow me to maintain high mental agility and focus.'
+      };
+    }
+
+    // 7. Sports / Cricket / Football / Workout / Fitness
+    if (/sport|cricket|football|game|play|fitness|gym|workout|खेल|क्रिकेट|फुटबॉल|मैच|कसरत|deporte|sport|fussball|スポーツ/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'मैं सप्ताहांत में क्रिकेट खेलता हूँ और अपने स्वास्थ्य का ध्यान रखता हूँ।',
+          Intermediate: 'क्रिकेट जैसा प्रतिस्पर्धी खेल टीम भावना, त्वरित निर्णय और शारीरिक सक्रियता सिखाता है।',
+          Advanced: 'नियमित खेल और शारीरिक व्यायाम न केवल शारीरिक स्फूर्ति बनाए रखते हैं बल्कि दबाव में त्वरित रणनीतिक निर्णय लेने की क्षमता भी विकसित करते हैं।'
+        };
+      }
+      return {
+        Beginner: 'I enjoy playing cricket on weekends and doing light exercises to stay active.',
+        Intermediate: 'Playing competitive sports like cricket sharpens my reflexes and teaches me invaluable lessons in teamwork.',
+        Advanced: 'Athletic engagement cultivates disciplined focus, cardiovascular vitality, and collective leadership under high-pressure scenarios.'
+      };
+    }
+
+    // 8. Tech / AI / Coding / Software / Engineering / Computers
+    if (/tech|technology|ai|artificial|code|coding|software|computer|program|तकनीक|कोडिंग|कंप्यूटर|सॉफ्टवेयर|tecnología|technologie|技術/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'मुझे कंप्यूटर पर कोडिंग करना और AI टूल्स का उपयोग करना बहुत पसंद है।',
+          Intermediate: 'तकनीक जटिल समस्याओं को आसान बना देती है और हमारे सीखने की गति को कई गुना बढ़ा देती है।',
+          Advanced: 'आधुनिक सॉफ्टवेयर इंजीनियरिंग और आर्टिफिशियल इंटेलिजेंस मानवीय उत्पादकता को नई ऊंचाइयों पर ले जाने का सबसे क्रांतिकारी साधन हैं।'
+        };
+      }
+      return {
+        Beginner: 'I really enjoy coding and using modern AI tools to learn faster every day.',
+        Intermediate: 'Technology fascinates me because it empowers us to automate complex workflows and build scalable applications.',
+        Advanced: 'The ongoing renaissance in artificial intelligence and distributed computing creates an extraordinary frontier for innovative software engineering.'
+      };
+    }
+
+    // 9. College / Studies / Subjects / University
+    if (/college|study|university|student|major|class|subject|course|कॉलेज|पढ़ाई|विश्वविद्यालय|विषय|universidad|université|studium|大学/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'मैं कॉलेज में इंजीनियरिंग की पढ़ाई कर रहा हूँ और नए तकनीकी विषय सीख रहा हूँ।',
+          Intermediate: 'कॉलेज में मेरा ध्यान मुख्य रूप से कंप्यूटर विज्ञान और व्यावहारिक प्रोजेक्ट्स बनाने पर केंद्रित है।',
+          Advanced: 'अकादमिक अध्ययन को व्यावहारिक उद्योग-उन्मुख कौशल के साथ एकीकृत करना मेरी वर्तमान शैक्षणिक प्राथमिकताओं के केंद्र में है।'
+        };
+      }
+      return {
+        Beginner: 'I am currently pursuing my degree in college and enjoying my computer science coursework.',
+        Intermediate: 'In college, I am primarily focused on mastering algorithms, system design, and collaborative project execution.',
+        Advanced: 'Balancing theoretical academic rigor with hands-on technical architecture is the cornerstone of my undergraduate training.'
+      };
+    }
+
+    // 10. Why / Reason / Because
+    if (/why|reason|because|cause|क्यों|कारण|por qué|pourquoi|warum|なぜ/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'इसका मुख्य कारण यह है कि यह बहुत सरल, व्यावहारिक और उपयोगी है।',
+          Intermediate: 'मैं ऐसा इसलिए मानता हूँ क्योंकि यह समय की बचत करता है और जीवन में सकारात्मक परिणाम सुनिश्चित करता है।',
+          Advanced: 'इसके पीछे का प्राथमिक तर्क प्रक्रियात्मक दक्षता को अनुकूलित करना और दीर्घकालिक सतत प्रभाव पैदा करना है।'
+        };
+      }
+      return {
+        Beginner: 'I believe this because it is simple, practical, and saves a lot of time.',
+        Intermediate: 'The primary reason is that it eliminates bottlenecks and delivers consistent, measurable benefits.',
+        Advanced: 'The underlying rationale rests on maximizing systemic efficiency while fostering resilience against unforeseen bottlenecks.'
+      };
+    }
+
+    // 11. How / Method / Process
+    if (/how|process|method|way|step|कैसे|प्रक्रिया|तरीका|cómo|comment|wie|どのように/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'मैं छोटे-छोटे कदमों से शुरुआत करता हूँ और प्रतिदिन निरंतर अभ्यास करता हूँ।',
+          Intermediate: 'मैं अपने लक्ष्य को स्पष्ट प्राथमिकताओं में बाँटकर व्यवस्थित रूप से आगे बढ़ता हूँ।',
+          Advanced: 'मैं एक पुनरावृत्त कार्यप्रणाली का पालन करता हूँ जिसमें योजना निर्माण, व्यवस्थित क्रियान्वयन और निरंतर सुधार शामिल है।'
+        };
+      }
+      return {
+        Beginner: 'I start step by step and maintain consistent daily practice to get better.',
+        Intermediate: 'I break down the main objective into manageable milestones, focusing on steady, iterative execution.',
+        Advanced: 'I employ a systematic methodology centered around deliberate practice, feedback-driven optimization, and milestone validation.'
+      };
+    }
+
+    // 12. Yes/No / Do you / Have you / Can you
+    if (/do you|have you|can you|are you|is it|did you|क्या आप|क्या तुमने|क्या कभी|¿tienes|¿puedes|est-ce que|hast du/.test(q)) {
+      if (isHindi) {
+        return {
+          Beginner: 'हाँ, बिल्कुल! मुझे इसका अनुभव हुआ है और यह वाकई बहुत अच्छा रहा।',
+          Intermediate: 'हाँ, मैं इस बात से सहमत हूँ और मैंने इसे अपने व्यावहारिक जीवन में गहराई से परखा है।',
+          Advanced: 'निश्चित रूप से, मेरे व्यक्तिगत और व्यावसायिक अनुभवों ने इस दृष्टिकोण की प्रासंगिकता को भलीभाँति प्रमाणित किया है।'
+        };
+      }
+      return {
+        Beginner: 'Yes, definitely! I have experienced that and found it genuinely rewarding.',
+        Intermediate: 'Yes, I fully agree with that perspective, as I have observed its positive outcomes firsthand.',
+        Advanced: 'Indeed, my personal experience strongly validates that principle, highlighting the profound importance of adaptability.'
+      };
+    }
+
+    // Universal Dynamic Fallback: Extracts meaningful nouns/verbs from question to build flawless replies!
+    const cleanTokens = q
+      .replace(/[?.,!¿¡:;'"()]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 3 && !/what|which|where|when|that|this|with|from|have|your|about|their|there|would|could|should/.test(w));
+    
+    const focalSubject = cleanTokens.slice(0, 2).join(' ') || 'this topic';
+
+    if (isHindi) {
+      return {
+        Beginner: `इस विषय में मुझे लगता है कि यह काफी उपयोगी और महत्वपूर्ण है।`,
+        Intermediate: `मेरे विचार से यह एक अत्यंत विचारणीय बिंदु है जो हमारी सोच को समृद्ध करता है।`,
+        Advanced: `इस विषय का समग्र विश्लेषण करने पर यह स्पष्ट होता है कि यह आधुनिक परिप्रेक्ष्य में अत्यधिक प्रासंगिक है।`
+      };
+    }
+
+    return {
+      Beginner: `Regarding ${focalSubject}, I think it is very interesting and beneficial.`,
+      Intermediate: `In my experience with ${focalSubject}, taking a structured approach always leads to better understanding.`,
+      Advanced: `Analyzing ${focalSubject} reveals subtle nuances that underscore the necessity for balanced, critical thinking.`
+    };
+  };
+
   // Generate dynamic 3-level reply suggestions for any question in active language
   const updateDynamicSuggestions = (questionText: string, langKey = practiceLang) => {
-    const config = LANGUAGE_DATA[langKey] || LANGUAGE_DATA['en-US'];
-    const qLower = questionText.toLowerCase();
-
-    for (const [kw, replies] of Object.entries(config.suggestionsByKeyword)) {
-      if (qLower.includes(kw.toLowerCase())) {
-        setCurrentSuggestions(replies);
-        return;
-      }
-    }
-
-    if (/sport|cricket|game|play|football|खेल|deporte/.test(qLower)) {
-      setCurrentSuggestions(config.suggestionsByKeyword['cricket'] || config.defaultReplies);
-    } else if (/college|study|university|class|कॉलेज|पढ़ाई|estudio/.test(qLower)) {
-      setCurrentSuggestions(config.suggestionsByKeyword['college'] || config.defaultReplies);
-    } else if (/day|today|दिन|आज|día/.test(qLower)) {
-      setCurrentSuggestions(config.suggestionsByKeyword['day'] || config.defaultReplies);
-    } else if (/tech|ai|code|computer|तकनीक/.test(qLower)) {
-      setCurrentSuggestions(config.suggestionsByKeyword['tech'] || config.defaultReplies);
-    } else {
-      setCurrentSuggestions(config.defaultReplies);
-    }
+    const suggestions = generateUniversalSuggestions(questionText, langKey);
+    setCurrentSuggestions(suggestions);
   };
 
   // Switch Language: resets conversation, starts AI in chosen language, and speaks greeting
@@ -724,45 +936,141 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
     window.speechSynthesis.speak(utterance);
   };
 
-  // Generate dynamic AI responses in active language
+  // Generate contextual, conversational AI responses & follow-up questions in active language
   const generateAIResponse = (userText: string): string => {
     const config = LANGUAGE_DATA[practiceLang] || LANGUAGE_DATA['en-US'];
     const t = userText.toLowerCase();
+    const isHindi = practiceLang.startsWith('hi');
 
-    if (/cricket|football|game|sport|play|खेल|मैच|deporte|football|sport/.test(t)) {
-      return config.aiReplies.sport ? config.aiReplies.sport[level] : config.defaultReplies[level];
+    // Questions asked to AI
+    if (/who are you|your name|what are you|तुम कौन हो|तुम्हारा नाम क्या है|आप कौन हैं/.test(t)) {
+      if (isHindi) return 'मैं आपका भाषा अभ्यास मित्र और AI स्पीकिंग ट्यूटर हूँ! 😊 मैं आपके साथ बातचीत करके आपका आत्मविश्वास बढ़ाने में मदद करता हूँ। आप आज किस विषय पर बात करना चाहते हैं?';
+      return "I'm your AI speaking companion and language practice coach! 😊 I'm here to chat with you and help you speak fluently with confidence. What exciting topic would you like to explore next?";
     }
 
-    if (/college|school|study|engineering|student|class|कॉलेज|पढ़ाई|विश्वविद्यालय|estudio|université/.test(t)) {
-      return config.aiReplies.college ? config.aiReplies.college[level] : config.defaultReplies[level];
+    if (/how are you|how do you do|how are things|आप कैसे हैं|तुम कैसे हो|हाल चाल/.test(t)) {
+      if (isHindi) return 'मैं बहुत अच्छा और ऊर्जावान हूँ, पूछने के लिए धन्यवाद! 😊 आपके साथ बातचीत करके मुझे बहुत खुशी हो रही है। आप आज कैसा महसूस कर रहे हैं?';
+      return "I'm doing wonderful and feeling great, thank you for asking! 😊 I always love conversing with eager learners like you. How has your day been treating you so far?";
     }
 
-    if (/good|fine|great|happy|awesome|well|अच्छा|बढ़िया|खुश|bien|super/.test(t)) {
-      return config.aiReplies.day ? config.aiReplies.day[level] : config.defaultReplies[level];
+    // 1. Food & Cooking
+    if (/food|dish|cook|biryani|paneer|curry|eat|lunch|dinner|breakfast|खाना|व्यंजन|पकाना|भोजन|स्वाद/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'यह तो बहुत स्वादिष्ट लगता है! 🍲 क्या आप इसे खुद बनाना जानते हैं या बाहर खाना पसंद करते हैं?';
+        if (level === 'Intermediate') return 'स्वादिष्ट भोजन दिन को खुशनुमा बना देता है! क्या आपके परिवार में कोई खास पारंपरिक रेसिपी है जो आपको सबसे ज्यादा पसंद है?';
+        return 'खानपान हमारी सांस्कृतिक पहचान का एक अभिन्न अंग है। क्या आपको लगता है कि पारंपरिक क्षेत्रीय व्यंजनों को आधुनिक समय में भी संरक्षित रखना आवश्यक है?';
+      }
+      if (level === 'Beginner') return 'That sounds delicious! 🍲 Do you enjoy cooking this dish yourself, or do you have a favourite restaurant where you eat it?';
+      if (level === 'Intermediate') return 'Good food always brings great joy! Do you have a special family recipe or traditional delicacy that holds special memories for you?';
+      return 'Culinary traditions reflect cultural identity and heritage. How do you feel modern lifestyle and fast food trends are impacting authentic home cooking?';
     }
 
-    if (/tech|coding|programming|computer|ai|तकनीक|कंप्यूटर|কোডিং/.test(t)) {
-      return config.aiReplies.tech ? config.aiReplies.tech[level] : config.defaultReplies[level];
+    // 2. Travel & Vacation
+    if (/travel|trip|mountain|beach|city|country|visit|delhi|mumbai|paris|japan|london|holiday|vacation|घूमना|यात्रा|सफर|पहाड़|पर्यटन/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'वाह, यात्रा करना वाकई रोमांचक है! ✈️ आप किसके साथ यात्रा करना सबसे ज्यादा पसंद करते हैं?';
+        if (level === 'Intermediate') return 'नई जगहों की यात्रा हमें बहुत कुछ सिखाती है। जब आप किसी नई जगह जाते हैं, तो आपको वहाँ की कौन सी चीज़ सबसे ज्यादा आकर्षित करती है?';
+        return 'यात्राएं हमारे दृष्टिकोण और अनुकूलन क्षमता को निखारती हैं। आपकी अब तक की सबसे यादगार यात्रा कौन सी रही है और उसने आप पर क्या प्रभाव डाला?';
+      }
+      if (level === 'Beginner') return 'That sounds like an amazing place to visit! ✈️ Do you prefer traveling with friends, family, or going solo?';
+      if (level === 'Intermediate') return 'Traveling to new destinations opens up fresh perspectives. What is the first thing you love to explore when arriving in a new city?';
+      return 'Immersive travel challenges our preconceptions and fosters cultural empathy. What has been the most transformative trip of your life so far?';
     }
 
-    // Default progressive encouragement in active language
-    if (practiceLang.startsWith('hi')) {
-      if (level === 'Beginner') return 'बहुत बढ़िया उत्तर! 😊 क्या आप इस बारे में एक और सरल वाक्य बता सकते हैं?';
-      if (level === 'Intermediate') return 'साझा करने के लिए धन्यवाद! क्या आप इसका एक व्यावहारिक उदाहरण दे सकते हैं?';
-      return 'यह एक बहुत ही विचारणीय दृष्टिकोण है। इस विषय पर आपका व्यक्तिगत अनुभव कैसा रहा है?';
-    } else if (practiceLang.startsWith('es')) {
-      if (level === 'Beginner') return '¡Buena respuesta! 😊 ¿Puedes contarme un poco más en una frase sencilla?';
-      if (level === 'Intermediate') return '¡Gracias por compartir! ¿Podrías darme un ejemplo práctico de tu experiencia?';
-      return 'Es una perspectiva muy articulada. ¿Cómo ha influido esto en tus decisiones recientes?';
-    } else if (practiceLang.startsWith('fr')) {
-      if (level === 'Beginner') return 'Très bonne réponse ! 😊 Pouvez-vous m\'en dire un peu plus en une phrase simple ?';
-      if (level === 'Intermediate') return 'Merci pour ce partage ! Pourriez-vous donner un exemple concret ?';
-      return 'C\'est une perspective très réfléchie. Comment cette idée influence-t-elle vos projets ?';
+    // 3. Interview / Career / Strengths / Ambition
+    if (/interview|career|job|engineer|software|developer|passion|ambition|goal|strength|कंपनी|करियर|लक्ष्य|ताकत|सफलता/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'यह बहुत प्रेरणादायक लक्ष्य है! 🎯 इस सपने को पूरा करने के लिए आप कौन सी नई स्किल सीख रहे हैं?';
+        if (level === 'Intermediate') return 'करियर में स्पष्ट विजन होना सफलता की पहली सीढ़ी है। आप आने वाले दो वर्षों में खुद को किस मुकाम पर देखना चाहते हैं?';
+        return 'व्यावसायिक उत्कृष्टता प्राप्त करने के लिए तकनीकी विशेषज्ञता के साथ-साथ संचार और नेतृत्व कौशल भी अनिवार्य हैं। आप इन कौशलों को कैसे निखार रहे हैं?';
+      }
+      if (level === 'Beginner') return 'That is a very inspiring career ambition! 🎯 What key skill are you actively practicing to achieve this goal?';
+      if (level === 'Intermediate') return 'Having a clear career vision is wonderful. Where do you see yourself making the most significant impact over the next couple of years?';
+      return 'Professional growth demands both core technical mastery and empathetic leadership. How do you systematically evaluate and upgrade your professional skill set?';
     }
 
-    if (level === 'Beginner') return 'Good answer! 😊 Can you tell me a little bit more about that in one simple sentence?';
-    if (level === 'Intermediate') return 'Thanks for sharing that! Could you elaborate further or give me a practical example from your experience?';
-    return 'That is a well-articulated perspective. Could you expand on the underlying reasoning behind that point of view?';
+    // 4. Friends & Family
+    if (/friend|friendship|brother|sister|family|mother|father|parents|दोस्त|मित्र|परिवार|माता|पिता|भाई|बहन/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'सच्चे दोस्त और परिवार जीवन की सबसे बड़ी ताकत हैं! 🤝 आप अपने दोस्तों के साथ खाली समय में क्या करना पसंद करते हैं?';
+        if (level === 'Intermediate') return 'अच्छे रिश्ते हमें हर परिस्थिति में मजबूत बनाए रखते हैं। क्या आपके पास कोई ऐसा दोस्त है जिसने आपके जीवन में बड़ा सकारात्मक बदलाव लाया हो?';
+        return 'सच्ची मित्रता और पारिवारिक संबंध हमारे भावनात्मक लचीलेपन की आधारशिला हैं। आज के डिजिटल युग में आप इन रिश्तों में आत्मीयता कैसे बनाए रखते हैं?';
+      }
+      if (level === 'Beginner') return 'True friends and family make life so meaningful! 🤝 What is your favourite activity to do when you hang out with your close friends?';
+      if (level === 'Intermediate') return 'Strong bonds support us through every milestone. Tell me about a close friend who has inspired or supported you in a meaningful way.';
+      return 'Deep interpersonal relationships are vital for mental well-being and emotional equilibrium. How do you maintain authentic connection in an increasingly virtual world?';
+    }
+
+    // 5. Entertainment / Movies / Books / Music
+    if (/movie|film|cinema|song|music|actor|book|read|novel|फिल्म|गाना|संगीत|किताब|उपन्यास|अभिनेता/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'बहुत बढ़िया पसंद! 🎬 आपकी सबसे पसंदीदा फिल्म या किताब कौन सी है और वह आपको क्यों पसंद आई?';
+        if (level === 'Intermediate') return 'कला और संगीत हमारे मूड को पूरी तरह बदल देते हैं। क्या कोई ऐसा गाना या किताब है जो आपको हमेशा नई प्रेरणा देती है?';
+        return 'साहित्य और सिनेमा मानव समाज के विचारों और भावनाओं का दर्पण हैं। क्या आप किसी ऐसे पात्र या कथानक से गहराई से जुड़े हैं जिसने आपकी सोच बदली हो?';
+      }
+      if (level === 'Beginner') return 'Great choice! 🎬 What is the name of your all-time favourite movie or book, and why did you like it?';
+      if (level === 'Intermediate') return 'Creative works have a profound way of influencing our mood and mindset. Is there a specific genre or artist that never fails to inspire you?';
+      return 'Cinematic masterpieces and literature often challenge conventional viewpoints. Has there been a story or piece of music that reshaped your worldview?';
+    }
+
+    // 6. Sports / Cricket / Workout
+    if (/cricket|football|game|sport|play|match|batting|bowling|gym|workout|खेल|मैच|क्रिकेट|फुटबॉल|कसरत/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'क्रिकेट और खेलकूद स्वास्थ्य के लिए बेहतरीन हैं! 🏏 आपका पसंदीदा खिलाड़ी कौन है?';
+        if (level === 'Intermediate') return 'खेल हमें टीमवर्क और अनुशासन सिखाते हैं। जब आपकी टीम दबाव में होती है, तो आप उस स्थिति का सामना कैसे करते हैं?';
+        return 'प्रतिस्पर्धी खेल मानसिक दृढ़ता और रणनीतिक सूझबूझ को निखारते हैं। खेल के मैदान से सीखी कौन सी बात आपको अपने दैनिक जीवन और पढ़ाई में मदद करती है?';
+      }
+      if (level === 'Beginner') return 'Sports are fantastic for keeping mind and body sharp! 🏏 Who is your all-time favourite sports player or athlete?';
+      if (level === 'Intermediate') return 'Playing competitive sports teaches invaluable lessons in team spirit and resilience. How do you handle high-pressure moments during a game?';
+      return 'Athletic disciplines instill strategic composure and endurance under adversity. How do the tactical principles of competitive sports carry over into your academic endeavors?';
+    }
+
+    // 7. College / Studies / Subjects
+    if (/college|school|study|engineering|student|class|exam|project|course|कॉलेज|पढ़ाई|विश्वविद्यालय|परीक्षा|प्रोजेक्ट/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'पढ़ाई में रुचि होना बहुत अच्छी बात है! 📚 आपका सबसे पसंदीदा विषय कौन सा है?';
+        if (level === 'Intermediate') return 'कॉलेज का समय नए ज्ञान और प्रयोगों का होता है। हाल ही में आपने किस दिलचस्प प्रोजेक्ट या असाइनमेंट पर काम किया है?';
+        return 'अकादमिक अध्ययन को व्यावहारिक उद्योग-उन्मुख कौशल के साथ जोड़ना बेहद जरूरी है। अपने कोर्सवर्क के दौरान आपको कौन सी सबसे बड़ी तकनीकी चुनौती का सामना करना पड़ा?';
+      }
+      if (level === 'Beginner') return 'It is wonderful to focus on your education! 📚 Which subject or topic do you find most interesting in your studies?';
+      if (level === 'Intermediate') return 'College presents so many opportunities to build practical knowledge. Tell me about a hands-on project or assignment you recently worked on.';
+      return 'Bridging theoretical coursework with tangible real-world application requires continuous curiosity. What academic challenge has stretched your problem-solving capabilities the most?';
+    }
+
+    // 8. Technology & AI
+    if (/tech|coding|programming|computer|ai|software|python|javascript|react|तकनीक|कंप्यूटर|सॉफ्टवेयर|कोडिंग/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'टेक्नोलॉजी की दुनिया वाकई अद्भुत है! 💻 आप कंप्यूटर पर क्या बनाना सबसे ज्यादा पसंद करते हैं?';
+        if (level === 'Intermediate') return 'कोडिंग और नए टूल्स सीखना बहुत रोमांचक होता है। आप आजकल किस प्रोग्रामिंग भाषा या फ्रेमवर्क पर काम कर रहे हैं?';
+        return 'आर्टिफिशियल इंटेलिजेंस और ऑटोमेशन हर उद्योग का भविष्य तय कर रहे हैं। आपके अनुसार आने वाले वर्षों में AI छात्रों और डेवलपर्स के काम को कैसे बदलेगा?';
+      }
+      if (level === 'Beginner') return 'Technology is fascinating! 💻 What is your favourite thing to create or explore using computers?';
+      if (level === 'Intermediate') return 'Exploring modern programming frameworks opens so many doors. Which programming language or developer tool are you currently mastering?';
+      return 'Generative AI and automated toolchains are redefining software development paradigms. How are you positioning your skills to thrive alongside intelligent systems?';
+    }
+
+    // 9. Day / Morning / Routine
+    if (/good|fine|great|happy|awesome|well|morning|today|routine|दिन|सुबह|शाम|बढ़िया|अच्छा|दिनचर्या/.test(t)) {
+      if (isHindi) {
+        if (level === 'Beginner') return 'यह जानकर बहुत अच्छा लगा! 😊 आज के दिन की सबसे अच्छी बात क्या रही?';
+        if (level === 'Intermediate') return 'सकारात्मक शुरुआत से पूरा दिन productive बन जाता है! क्या आपके पास कोई ऐसी आदत है जो आपको दिनभर ऊर्जावान रखती है?';
+        return 'सक्रिय और संतुलित दिनचर्या बनाए रखना मानसिक स्पष्टता के लिए अनिवार्य है। आप अपने अध्ययन, स्वास्थ्य और विश्राम के बीच संतुलन कैसे साधते हैं?';
+      }
+      if (level === 'Beginner') return "I'm delighted to hear that! 😊 What has been the most pleasant or productive highlight of your day so far?";
+      if (level === 'Intermediate') return 'Starting with positive energy sets the rhythm for the entire day! Do you follow any morning ritual that keeps you focused and energized?';
+      return 'Maintaining intentional daily rhythms sustains high cognitive performance over long stretches. How do you design your routine to prevent burnout and foster creative clarity?';
+    }
+
+    // Default Progressive Conversational Response
+    if (isHindi) {
+      if (level === 'Beginner') return 'बहुत ही अच्छा और स्पष्ट उत्तर! 😊 क्या आप इस बारे में मुझे एक और रोचक उदाहरण बता सकते हैं?';
+      if (level === 'Intermediate') return 'साझा करने के लिए धन्यवाद! यह बहुत ही विचारणीय बिंदु है। इस अनुभव ने आपकी सोच पर क्या प्रभाव डाला?';
+      return 'यह एक अत्यंत विचारोत्तेजक और संतुलित दृष्टिकोण है। इस विषय के दीर्घकालिक परिणामों के बारे में आपका क्या विचार है?';
+    }
+
+    if (level === 'Beginner') return 'Great point! 😊 Can you tell me a little bit more about that in another simple sentence?';
+    if (level === 'Intermediate') return 'Thank you for sharing that thoughtful perspective! Could you give me an example from your personal experience that illustrates that?';
+    return 'That is a well-articulated, insightful point of view. What do you consider the most significant factor that reinforces that perspective?';
   };
 
   // Send message
@@ -1432,6 +1740,25 @@ export function VoicePractice({ onProgress }: VoicePracticeProps) {
               >
                 Use reply
               </button>
+            </div>
+
+            {/* Quick 1-tap level reply chips */}
+            <div className="quick-replies-row">
+              <span className="quick-replies-label">💡 All levels:</span>
+              {(['Beginner', 'Intermediate', 'Advanced'] as const).map(lvl => (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => {
+                    setLevel(lvl);
+                    setInputVal(currentSuggestions[lvl] || currentSuggestions.Beginner);
+                  }}
+                  title={currentSuggestions[lvl]}
+                  className={`quick-reply-chip ${level === lvl ? 'active' : ''}`}
+                >
+                  <b>{lvl === 'Beginner' ? '🌱' : lvl === 'Intermediate' ? '✨' : '🚀'} {lvl}:</b> {(currentSuggestions[lvl] || currentSuggestions.Beginner).slice(0, 32)}…
+                </button>
+              ))}
             </div>
 
             {/* Send Row */}

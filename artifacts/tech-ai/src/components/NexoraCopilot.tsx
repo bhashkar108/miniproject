@@ -33,6 +33,242 @@ const MODULE_NAV_MAP: Record<string, { label: string; icon: any; desc: string }>
   profile: { label: 'Student Profile', icon: User, desc: 'Account details and preferences' },
 };
 
+// Comprehensive Deep Knowledge Base for the Entire Website
+interface FeatureDetail {
+  title: string;
+  route: string;
+  summaryHi: string;
+  summaryEn: string;
+  stepsHi: string[];
+  stepsEn: string[];
+  tipsHi: string;
+  tipsEn: string;
+}
+
+const DEEP_WEBSITE_KNOWLEDGE: Record<string, FeatureDetail> = {
+  voiceroom: {
+    title: 'Student Voice Rooms (स्टूडेंट वॉइस रूम्स)',
+    route: 'voiceroom',
+    summaryHi: 'यह फीचर दोस्तों और सहपाठियों के साथ लाइव ऑडियो कॉल पर ग्रुप स्टडी और भाषा अभ्यास करने के लिए है। इसमें वेबआरटीसी P2P ऑडियो, लाइव चैट और व्हाट्सएप इनवाइट लिंक की सुविधा है।',
+    summaryEn: 'Real-time multi-user audio calling room platform for language exchange and group study. Features browser-to-browser P2P WebRTC audio, live text chat, and 1-click WhatsApp invite links.',
+    stepsHi: [
+      '1. **रूम बनाएं**: "＋ Create Room" बटन पर क्लिक करें। रूम का नाम, विषय (Language, Education, etc.) और अधिकतम क्षमता (Capacity) चुनें।',
+      '2. **स्टेज पर जाएं**: रूम बनते ही आप सीधे स्टेज पर लाइव हो जाएंगे और आपका माइक्रोफोन सक्रिय हो जाएगा।',
+      '3. **दोस्तों को इनवाइट करें**: "Share on WhatsApp" या "Copy link" पर क्लिक करें। आप खुद रूम में स्टेज पर बने रहेंगे और दोस्तों के जुड़ने का इंतजार कर सकेंगे।',
+      '4. **दोस्त का सीधे स्टेज पर आना**: जब आपका दोस्त उस लिंक पर क्लिक करेगा, वह सीधे आपके रूम में आपके साथ स्टेज पर आ जाएगा।',
+      '5. **माइक और चैट से बात करें**: दोनों लोग बिना किसी रुकावट के लाइव बोल सकते हैं और दाईं तरफ दिए गए चैट बॉक्स से टेक्स्ट मैसेज भेज सकते हैं।',
+      '6. **होस्ट नियंत्रण**: होस्ट के रूप में आप रूम लॉक कर सकते हैं या प्रतिभागियों को म्यूट कर सकते हैं।'
+    ],
+    stepsEn: [
+      '1. **Create Room**: Click "＋ Create Room", enter room title, category, and student capacity.',
+      '2. **Go on Stage**: You immediately land on stage with your microphone activated.',
+      '3. **Invite Friends**: Click "Share on WhatsApp" or "Copy link". You stay on stage while waiting for friends to join.',
+      '4. **Direct Auto-Join**: When your friend opens the link, they automatically land directly on stage with you.',
+      '5. **Talk via Mic & Chat**: Speak freely via real-time WebRTC audio and exchange text messages in the chat panel.',
+      '6. **Host Controls**: As host, you can mute participants, lock the room, or close the session.'
+    ],
+    tipsHi: '💡 **टिप:** लिंक शेयर करने के बाद आपको रूम से बाहर निकलने की जरूरत नहीं है; आप स्टेज पर रहकर आराम से दोस्तों का इंतजार कर सकते हैं।',
+    tipsEn: '💡 **Pro Tip:** You do not need to leave the room after sharing; you remain active on stage waiting for your friends.'
+  },
+  voice: {
+    title: 'English Practice & AI Voice Studio (इंग्लिश प्रैक्टिस)',
+    route: 'voice',
+    summaryHi: 'यह फीचर एक लाइव 3D स्काई ऑर्ब के साथ आवाज में बातचीत का अभ्यास करवाता है। हर सवाल पर डायनामिक 3-लेवल रिप्लाई लाइन्स अपने आप तैयार होती हैं ताकि बातचीत का फ्लो कभी न टूटे।',
+    summaryEn: 'Interactive spoken language partner with animated sky orb, multi-language speech, and automatically generated 3-level reply lines for every single question.',
+    stepsHi: [
+      '1. **भाषा और स्तर चुनें**: अपनी प्रैक्टिस भाषा (English, Hindi, Spanish आदि) और स्तर (Beginner, Intermediate, Advanced) चुनें।',
+      '2. **विषय चुनें**: कोई भी बातचीत का विषय चुनें (Daily life, Food, Travel, Interview, Tech) या "Custom Topic" में अपनी पसंद का विषय लिखें।',
+      '3. **AI का सवाल सुनें**: AI आपसे उस विषय पर बोलकर सवाल पूछेगा।',
+      '4. **डायनामिक रिप्लाई लाइनें**: स्क्रीन पर सवाल के नीचे तुरंत उस सवाल के अनुसार 3 उत्तर दिखेंगे। "Use reply" दबाकर उत्तर भेजें या "Pronounce" से उच्चारण सुनें।',
+      '5. **माइक से बोलें**: माइक बटन दबाकर मुंह से बोलें — AI आपके चुप होने का 1.6 सेकंड इंतजार करेगा और कभी बीच में नहीं टोकेगा।',
+      '6. **फ्लो न टूटना**: आपके हर उत्तर के बाद AI नया सवाल पूछेगा और तुरंत नए 3 रिप्लाई तैयार करेगा!'
+    ],
+    stepsEn: [
+      '1. **Choose Language & Level**: Select your practice language (English, Hindi, etc.) and difficulty (Beginner, Intermediate, Advanced).',
+      '2. **Select Topic**: Pick a conversation topic (Daily life, Food, Travel, Interview) or type a custom topic.',
+      '3. **Listen to AI**: The AI speaks an engaging question suited to the topic.',
+      '4. **Dynamic Reply Lines**: Below the orb, 3 level-tailored replies generate automatically for that exact question. Click "Use reply" or listen to pronunciation.',
+      '5. **Speak via Mic**: Tap the mic and speak naturally — AI waits 1.6s of silence before replying.',
+      '6. **Unbroken Flow**: For every answer you give, AI responds with a follow-up question and generates brand new replies!'
+    ],
+    tipsHi: '💡 **टिप:** अगर आपको बोलने में झिझक हो रही है, तो दिए गए "Quick reply" चिप पर क्लिक करके तुरंत सही वाक्य बोल या भेज सकते हैं।',
+    tipsEn: '💡 **Pro Tip:** Tap any quick reply chip to immediately populate a fluent, grammatically correct answer.'
+  },
+  teacher: {
+    title: 'AI Teacher (AI टीचर)',
+    route: 'teacher',
+    summaryHi: 'यह आपका पर्सनल डिजिटल टीचर है जो किसी भी नोट्स, PDF या विषय को बोलकर और लिखकर 25+ भाषाओं में आसान शब्दों में समझाता है।',
+    summaryEn: 'Personal AI educator that explains any study notes, PDF, or textbook chapter in 25+ languages with synchronized spoken voice and highlighting.',
+    stepsHi: [
+      '1. **नोट्स या PDF डालें**: अपना टेक्स्ट बॉक्स में पेस्ट करें या कोई भी PDF / डॉक्युमेंट फाइल अपलोड करें।',
+      '2. **समझाने की भाषा चुनें**: जिस भाषा में समझना है (हिंदी, इंग्लिश, बंगाली आदि) वह चुनें और स्पीड (0.8x से 1.2x) सेट करें।',
+      '3. **Teach Lesson पर क्लिक करें**: AI पूरे विषय को मुख्य बिंदुओं, सरल उदाहरणों और टेकअवे में विभाजित कर देगा।',
+      '4. **बोलकर व्याख्या सुनना**: AI खुद बोलकर समझाएगा और जो शब्द बोलेगा वह स्क्रीन पर बड़ा होकर चमकेगा।',
+      '5. **माइक से सवाल पूछें**: नीचे दिए गए माइक बटन को दबाकर बिना टाइप किए मुंह से कोई भी डाउट पूछें — AI तुरंत उत्तर देगा।'
+    ],
+    stepsEn: [
+      '1. **Input Notes or PDF**: Paste study material or upload textbook PDFs/images.',
+      '2. **Select Language**: Pick your explanation language (Hindi, English, etc.) and speech rate.',
+      '3. **Click Teach Lesson**: AI structures the topic into core concepts, practical analogies, and key takeaways.',
+      '4. **Spoken Audio**: AI reads the explanation aloud with synchronized animated word highlighting.',
+      '5. **Voice QA**: Tap the mic button to ask follow-up questions hands-free.'
+    ],
+    tipsHi: '💡 **टिप:** परीक्षा से पहले कठिन चैप्टर का सारांश सुनने के लिए AI Teacher सबसे तेज और असरदार तरीका है।',
+    tipsEn: '💡 **Pro Tip:** Perfect for quick exam revision — upload your chapter and listen hands-free at 1.2x speed.'
+  },
+  docs: {
+    title: 'Smart Doc (स्मार्ट डॉक)',
+    route: 'docs',
+    summaryHi: 'फॉर्म भरने, कॉलेज एडमिशन और सरकारी पोर्टल्स के लिए डॉक्युमेंट स्कैनर, 90° रोटेटर और मनचाहे साइज (50KB, 100KB, 200KB) में कंप्रेस करने का टूल।',
+    summaryEn: 'Document capture, crop, 90° rotation, and target-size file compressor (50KB to 500KB) designed for exam portals and admissions.',
+    stepsHi: [
+      '1. **फोटो लें या अपलोड करें**: "Camera preview" से लाइव फोटो खींचे (कैमरा फ्लैश इफेक्ट के साथ) या "Upload document" से फाइल चुनें।',
+      '2. **90° घुमाएं (Rotate)**: "Rotate 90°" बटन पर क्लिक करके इमेज को जितनी बार चाहें सही दिशा में घुमाएं।',
+      '3. **क्रॉप करें (Crop)**: "Crop margins" स्लाइडर से फालतू बैकग्राउंड हटाएं।',
+      '4. **साइज सेट करें (Compress)**: "Compress to target size" स्लाइडर को अपने पोर्टल की जरूरत अनुसार सेट करें (उदा. 100 KB या 200 KB)।',
+      '5. **Create processed copy दबाएं**: इस पर क्लिक करते ही रोटेशन, क्रॉप और कंप्रेशन सब एक साथ लागू हो जाएंगे।',
+      '6. **साइज की तुलना व डाउनलोड**: ओरिजिनल साइज और तैयार साइज की तुलना देखें और "Download" बटन से फाइल सेव करें।'
+    ],
+    stepsEn: [
+      '1. **Capture or Upload**: Take a live camera photo with flash feedback or upload an existing image/PDF.',
+      '2. **Rotate 90°**: Click "Rotate 90°" as many times as needed to properly orient your document.',
+      '3. **Crop**: Adjust the crop slider to trim unwanted borders.',
+      '4. **Target Size**: Slide the target size control to match portal requirements (e.g., 100 KB or 200 KB).',
+      '5. **Click Create Processed Copy**: Applies all rotation, cropping, and compression settings simultaneously.',
+      '6. **Compare & Download**: View original vs processed file size and download your optimized copy.'
+    ],
+    tipsHi: '💡 **टिप:** Rotate बटन दबाने के बाद "Create processed copy" पर क्लिक करने से सारे बदलाव एक साथ नई फाइल में सेव हो जाते हैं।',
+    tipsEn: '💡 **Pro Tip:** After rotating and cropping, click "Create processed copy" to apply all adjustments in one go.'
+  },
+  quiz: {
+    title: 'Auto Quiz (ऑटो क्विज)',
+    route: 'quiz',
+    summaryHi: 'वर्कशीट सॉल्व करने, परीक्षा अभ्यास करने और गलत उत्तरों पर तुरंत AI से चर्चा करने का इंटेलीजेंट टूल।',
+    summaryEn: 'Interactive worksheet practice and automated test solver featuring instant question preview, step-by-step reasoning, and wrong-answer AI discussions.',
+    stepsHi: [
+      '1. **वर्कशीट अपलोड करें**: अपनी क्विज फाइल अपलोड करें या टेक्स्ट पेस्ट करें।',
+      '2. **सवालों का प्रीव्यू**: दाईं तरफ सभी सवाल तुरंत प्रीव्यू में दिखने लगेंगे।',
+      '3. **Start Practice दबाएं**: एक-एक करके सवाल हल करें और "Check answer" करें।',
+      '4. **गलत उत्तर पर AI चर्चा**: अगर आपका उत्तर गलत होता है, तो तुरंत "💬 Discuss this question with AI" बटन दिखेगा — क्लिक करने पर AI पूरा कारण समझाएगा।',
+      '5. **Auto Solve All**: अगर आपको सभी सवालों के सही उत्तर और कारण एक साथ चाहिए, तो "Auto Solve All" दबाएं।'
+    ],
+    stepsEn: [
+      '1. **Upload Worksheet**: Upload your test sheet or paste questions.',
+      '2. **Instant Preview**: Questions list appears immediately in the right preview panel.',
+      '3. **Start Practice**: Click "Start Practice" to answer questions one by one with instant scoring.',
+      '4. **Discuss Wrong Answers**: If you pick the wrong option, tap "💬 Discuss this question with AI" for an in-depth breakdown.',
+      '5. **Auto Solve All**: Click "Auto Solve All" to instantly solve the entire worksheet with full explanations.'
+    ],
+    tipsHi: '💡 **टिप:** गलत उत्तर होने पर "Discuss with AI" बटन दबाने से आपका कॉन्सेप्ट हमेशा के लिए क्लियर हो जाता है।',
+    tipsEn: '💡 **Pro Tip:** Use "Discuss with AI" on any incorrect answer to understand the underlying theory.'
+  },
+  equations: {
+    title: 'Equation Graph (इक्वेशन ग्राफ)',
+    route: 'equations',
+    summaryHi: '2D गणितीय ग्राफ प्लॉटर, इंटरसेक्शन पॉइंट्स निकालने और कैमरे से फॉर्मूले को OCR से स्कैन करने का टूल।',
+    summaryEn: 'Interactive 2D Cartesian function plotter with intersection detection, vertical line support (e.g. x=0), and camera OCR equation scanning.',
+    stepsHi: [
+      '1. **फॉर्मूला लिखें**: इनपुट बॉक्स में कोई भी समीकरण लिखें, जैसे `y = x^2 - 4`, `y = 2*x + 1`, या `x = 0` (वर्टिकल लाइन)।',
+      '2. **लाइव ग्राफ देखें**: ग्राफ तुरंत 2D कोऑर्डिनेट प्लेन पर खिंच जाएगा।',
+      '3. **इंटरसेक्शन देखें**: दोनों रेखाओं के कटने के बिंदु (X, Y) अपने आप कैलकुलेट होकर नीचे दिखेंगे।',
+      '4. **फोटो से समीकरण स्कैन करें**: अगर आपके पास नोटबुक में फॉर्मूला है, तो फोटो अपलोड करके OCR से सीधे समीकरण निकाल सकते हैं।'
+    ],
+    stepsEn: [
+      '1. **Enter Equations**: Type formulas such as `y = x^2 - 4`, `y = 2*x + 1`, or `x = 0`.',
+      '2. **Live Graph**: The curve renders in real-time on the 2D Cartesian plane.',
+      '3. **Intersections**: Exact intersection coordinates are computed and displayed automatically.',
+      '4. **OCR Scan**: Upload photos of handwritten math formulas to auto-extract equations.'
+    ],
+    tipsHi: '💡 **टिप:** माउस व्हील से ग्राफ को ज़ूम इन/आउट और ड्रैग करके किसी भी बिंदु का मान देख सकते हैं।',
+    tipsEn: '💡 **Pro Tip:** Use mouse scroll or pinch gestures to zoom into subtle curve intersections.'
+  },
+  home: {
+    title: 'Student Dashboard (डैशबोर्ड)',
+    route: 'home',
+    summaryHi: 'आपकी पढ़ाई का मुख्य केंद्र — जहाँ आपके सभी टूल्स, आज के स्टडी मिनट्स और हाल की एक्टिविटीज एक जगह दिखती हैं।',
+    summaryEn: 'Your central command center displaying daily study minutes, completed exercises, quiz scores, and quick tool shortcuts.',
+    stepsHi: [
+      '1. **क्विक एक्सेस**: यहाँ से आप एक क्लिक में AI Teacher, Voice Rooms, Smart Doc आदि किसी भी टूल में जा सकते हैं।',
+      '2. **स्टडी टाइम**: देखें कि आपने आज कितने मिनट पढ़ाई की और आपका डेली स्ट्रीक क्या है।',
+      '3. **रिसेंट डॉक्युमेंट्स**: आपके हाल ही में बनाए गए डॉक्युमेंट्स और क्विज यहाँ सुरक्षित रहते हैं।'
+    ],
+    stepsEn: [
+      '1. **Quick Launch**: 1-click access to Voice Rooms, AI Teacher, Smart Doc, and Quizzes.',
+      '2. **Study Minutes**: Track daily focused learning time and continuous study streaks.',
+      '3. **Recent Items**: Quickly resume recently scanned documents or quiz attempts.'
+    ],
+    tipsHi: '💡 **टिप:** हर दिन पढ़ाई शुरू करने के लिए डैशबोर्ड आपका शुरुआती बिंदु है।',
+    tipsEn: '💡 **Pro Tip:** Start here each session to check your daily learning streak.'
+  }
+};
+
+// Generates an in-depth, structured response for any feature question
+function generateDetailedCopilotAnswer(query: string, currentModule: string, userName: string): { reply: string; navigateTo?: string } {
+  const lower = query.toLowerCase();
+  const isHindi = /[क-ह]/.test(query) || /(kaha|kaise|karo|batao|kholo|jaana|madad|kya|feature|tarika|step)/i.test(lower);
+
+  // 1. Overview of Entire Website
+  if (/all feature|kya kya hai|website|kya karta hai|sare feature|features|overview|kaise kaam|about this/i.test(lower) && !/voice\s*room|doc|teacher|quiz|equation/i.test(lower)) {
+    if (isHindi) {
+      return {
+        reply: `नमस्ते **${userName}**! 🙏 हमारी वेबसाइट **Nexora AI / Tech AI Student Workspace** छात्रों के लिए एक प्रीमियम ऑल-इन-वन लर्निंग प्लेटफॉर्म है।\n\nयहाँ आपके लिए ये सभी प्रमुख फीचर्स उपलब्ध हैं:\n\n1. 🎙️ **Student Voice Rooms**: दोस्तों के साथ लाइव माइक से बात करें, WhatsApp लिंक शेयर करें और साथ में प्रैक्टिस करें।\n2. 🗣️ **English Practice & Voice Studio**: 3D स्काई ऑर्ब के साथ बोलचाल का अभ्यास करें। हर सवाल पर डायनामिक रिप्लाई लाइन्स मिलती हैं।\n3. 📚 **AI Teacher**: किसी भी नोट्स या PDF को बोलकर 25+ भाषाओं में आसान शब्दों में समझाने वाला ट्यूटर।\n4. 📄 **Smart Doc**: कैमरा स्कैनर, 90° रोटेशन, क्रॉप और 50KB-500KB में साइज कंप्रेसर।\n5. 🧠 **Auto Quiz**: वर्कशीट सॉल्वर, गलत उत्तर पर AI चर्चा और स्टेप-बाय-स्टेप गाइड।\n6. 📈 **Equation Graph**: 2D गणितीय ग्राफ प्लॉटर, इंटरसेक्शन और फोटो OCR।\n7. 📊 **Dashboard & Progress**: दैनिक स्टडी मिनट्स और लर्निंग स्ट्रीक ट्रैकर।\n\nआप किसी भी फीचर के बारे में मुझसे पूछ सकते हैं (उदा: *"Smart Doc कैसे इस्तेमाल करें?"*) या जहाँ जाना चाहें सीधे बता सकते हैं!`,
+        navigateTo: undefined
+      };
+    }
+    return {
+      reply: `Hello **${userName}**! 👋 Welcome to **Nexora AI / Tech AI Student Workspace** — your comprehensive, modern educational platform.\n\nHere are the core features built into this website:\n\n1. 🎙️ **Student Voice Rooms**: Real-time group voice calls with live mics, WhatsApp invite links, and instant in-room chat.\n2. 🗣️ **English Practice Studio**: Live speaking partner with animated sky orb and dynamically generated reply lines for every question.\n3. 📚 **AI Teacher**: Spoken interactive lessons from your PDFs/notes in 25+ languages with voice QA.\n4. 📄 **Smart Doc**: Camera scanner, repeatable 90° rotation, crop, and target KB compression.\n5. 🧠 **Auto Quiz**: Interactive worksheet practice, instant right/wrong feedback, and AI discussion.\n6. 📈 **Equation Graph**: 2D Cartesian function grapher with intersections and OCR math scanner.\n7. 📊 **Dashboard & Progress**: Track your daily learning streak and study minutes.\n\nAsk me about any specific feature or tell me where you'd like to go!`,
+      navigateTo: undefined
+    };
+  }
+
+  // 2. Identify target module
+  let targetKey: string | undefined;
+  if (/voice\s*room|stage|call|audio\s*room|dost|friend|whatsapp|invite|mic|माइक|दोस्त|कॉल|रूम/i.test(lower)) {
+    targetKey = 'voiceroom';
+  } else if (/english|speaking|orb|practice|voice\s*studio|bolna|बातचीत|ऑर्ब|अंग्रेजी/i.test(lower)) {
+    targetKey = 'voice';
+  } else if (/teacher|notes|study|pdf|explain|पढ़ाओ|टीचर|नोट्स|लेक्चर/i.test(lower)) {
+    targetKey = 'teacher';
+  } else if (/doc|scan|compress|camera|rotate|crop|घूमा|साइज|दस्तावेज|दॉक/i.test(lower)) {
+    targetKey = 'docs';
+  } else if (/quiz|test|solve|question|mcq|वर्कशीट|क्विज|सवाल|उत्तर/i.test(lower)) {
+    targetKey = 'quiz';
+  } else if (/equation|graph|math|curve|plot|x=0|इंटरसेक्शन|समीकरण|ग्राफ/i.test(lower)) {
+    targetKey = 'equations';
+  } else if (/dashboard|home|streak|minutes|प्रोग्रेस|डैशबोर्ड/i.test(lower)) {
+    targetKey = 'home';
+  }
+
+  if (targetKey && DEEP_WEBSITE_KNOWLEDGE[targetKey]) {
+    const f = DEEP_WEBSITE_KNOWLEDGE[targetKey];
+    if (isHindi) {
+      const stepsFormatted = f.stepsHi.join('\n');
+      return {
+        reply: `### 📌 **${f.title}**\n\n${f.summaryHi}\n\n#### ⚙️ **स्टेप-बाय-स्टेप कैसे इस्तेमाल करें:**\n${stepsFormatted}\n\n${f.tipsHi}\n\n👉 **आप नीचे दिए गए बटन पर क्लिक करके सीधे इस फीचर पर जा सकते हैं!**`,
+        navigateTo: f.route
+      };
+    }
+    const stepsFormatted = f.stepsEn.join('\n');
+    return {
+      reply: `### 📌 **${f.title}**\n\n${f.summaryEn}\n\n#### ⚙️ **Step-by-Step Guide:**\n${stepsFormatted}\n\n${f.tipsEn}\n\n👉 **Click the navigation button below to jump straight to this feature!**`,
+      navigateTo: f.route
+    };
+  }
+
+  // Fallback conversational reply
+  if (isHindi) {
+    return {
+      reply: `नमस्ते **${userName}**! मैं आपकी सहायता के लिए तैयार हूँ। आप वर्तमान में **${MODULE_NAV_MAP[currentModule]?.label || 'Workspace'}** पेज पर हैं।\n\nआप मुझसे वेबसाइट के किसी भी फीचर के बारे में पूछ सकते हैं — जैसे:\n- *"Smart Doc में डॉक्यूमेंट कैसे कंप्रेस करें?"*\n- *"Voice Room में दोस्तों को कैसे बुलाएं?"*\n- *"English Practice कैसे काम करता है?"*\n\nआप क्या जानना चाहते हैं?`,
+      navigateTo: undefined
+    };
+  }
+
+  return {
+    reply: `Hello **${userName}**! I'm here to help you navigate and master every tool on this website. You are currently viewing **${MODULE_NAV_MAP[currentModule]?.label || 'Workspace'}**.\n\nYou can ask me detailed questions like:\n- *"How do I invite friends to my Voice Room?"*\n- *"How do I compress a document to 100 KB in Smart Doc?"*\n- *"How does English Practice generate dynamic replies?"*\n\nHow can I assist you right now?`,
+    navigateTo: undefined
+  };
+}
+
 export function NexoraCopilot({ currentModule, onNavigate, userName = 'Student' }: NexoraCopilotProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -217,51 +453,32 @@ export function NexoraCopilot({ currentModule, onNavigate, userName = 'Student' 
       }
       throw new Error('API failed');
     } catch {
-      // Offline fallback response
-      let fallbackText = `I'm here to help! You are currently on the **${MODULE_NAV_MAP[currentModule]?.label || 'Workspace'}** page.\n\nTell me where you want to go or what you'd like to practice, and I'll take you there!`;
-      let navTarget: string | undefined;
-
-      const lower = text.toLowerCase();
-      if (/voice\s*room|stage|call/i.test(lower)) {
-        fallbackText = `Sure! I am taking you to **Student Voice Rooms** where you can create or join live audio rooms with real microphones.`;
-        navTarget = 'voiceroom';
-      } else if (/teacher|notes|study/i.test(lower)) {
-        fallbackText = `Opening **AI Teacher**! You can upload notes or PDFs to get spoken and written explanations.`;
-        navTarget = 'teacher';
-      } else if (/english|voice\s*practice|speaking|orb/i.test(lower)) {
-        fallbackText = `Opening **English Practice & AI Voice Studio**! Talk with the animated AI orb to practice conversational speaking.`;
-        navTarget = 'voice';
-      } else if (/doc|scan|compress|pdf/i.test(lower)) {
-        fallbackText = `Opening **Smart Doc**! Capture documents or compress PDFs to your desired size.`;
-        navTarget = 'docs';
-      } else if (/equation|graph|math/i.test(lower)) {
-        fallbackText = `Opening **Equation Graph**! Plot 2D mathematical curves and find intersections.`;
-        navTarget = 'equations';
-      } else if (/quiz|test|solve/i.test(lower)) {
-        fallbackText = `Opening **Auto Quiz**! Practice worksheet questions or use the step-by-step AI solver.`;
-        navTarget = 'quiz';
-      }
+      // Instant intelligent knowledge-base response
+      const answer = generateDetailedCopilotAnswer(text, currentModule, userName);
 
       const aiMsg: Message = {
         id: `msg-${Date.now() + 1}`,
         sender: 'ai',
-        text: fallbackText,
+        text: answer.reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        navigateTo: navTarget,
+        navigateTo: answer.navigateTo,
         suggestedQuestions: [
-          '🎙️ Open Voice Rooms',
-          '📚 Open AI Teacher',
-          '🗣️ Practice English',
+          '🎙️ Voice Room कैसे काम करता है?',
+          '📄 Smart Doc में 100KB कंप्रेस कैसे करें?',
+          '🗣️ English Practice में कैसे बोलें?',
+          '📚 AI Teacher में PDF कैसे समझें?'
         ],
       };
 
       setMessages(prev => [...prev, aiMsg]);
-      speakText(fallbackText);
+      speakText(answer.reply);
 
-      if (navTarget && navTarget !== currentModule) {
+      // Only navigate if user explicitly asked to go/navigate/open, not just asking for information
+      const isExplicitNav = /take me|kholo|chalo|navigate|open|le chalo|jaana hai/i.test(text);
+      if (isExplicitNav && answer.navigateTo && answer.navigateTo !== currentModule) {
         setTimeout(() => {
-          onNavigate(navTarget);
-        }, 800);
+          onNavigate(answer.navigateTo);
+        }, 1200);
       }
     } finally {
       setIsTyping(false);

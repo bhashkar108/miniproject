@@ -6823,3 +6823,142 @@
   box-shadow: 0 6px 20px -2px rgba(2, 132, 199, 0.6) !important;
   transform: translateY(-1px);
 }
+
+/* Voice Practice Quick Replies Chips */
+.quick-replies-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  padding: 2px 0;
+  scrollbar-width: none;
+}
+.quick-replies-row::-webkit-scrollbar {
+  display: none;
+}
+.quick-replies-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #38bdf8;
+  white-space: nowrap;
+}
+.quick-reply-chip {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.15s ease;
+}
+.quick-reply-chip:hover {
+  background: rgba(14, 165, 233, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #e0f2fe;
+}
+.quick-reply-chip.active {
+  background: rgba(14, 165, 233, 0.25);
+  border-color: rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+  font-weight: 500;
+}
+
+/* VoiceRoom Live Stage Banners */
+.vr-waiting-banner,
+.vr-active-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  backdrop-filter: blur(8px);
+}
+
+.vr-waiting-banner {
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #bae6fd;
+}
+
+.vr-active-banner {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #a7f3d0;
+}
+
+.vr-live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 10px #38bdf8;
+  flex-shrink: 0;
+  animation: pulseDot 1.4s infinite;
+}
+
+.vr-live-dot.active {
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.vr-banner-text {
+  flex: 1;
+  min-width: 220px;
+}
+
+.vr-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vr-copy-pill,
+.vr-wa-pill {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.vr-copy-pill {
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: #e0f2fe;
+}
+.vr-copy-pill:hover {
+  background: rgba(56, 189, 248, 0.35);
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.vr-wa-pill {
+  background: #25d366;
+  color: #052e16;
+}
+.vr-wa-pill:hover {
+  background: #22c55e;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 10px rgba(37, 211, 102, 0.4);
+}
+
+
