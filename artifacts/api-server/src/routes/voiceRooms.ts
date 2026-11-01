@@ -248,20 +248,32 @@ function isHost(room: VoiceRoomData, userId: string): boolean {
 
 router.get("/voicerooms", async (_req, res) => {
   try {
+    // Collect all public & live rooms from memory first
+    const memoryList = Array.from(memoryRooms.values()).filter((r) => r.access === "Public" && r.live);
+    const roomMap = new Map<string, VoiceRoomData>();
+
+    // Add memory rooms first (latest created will be present)
+    for (const r of memoryList) {
+      roomMap.set(r.id, r);
+    }
+
+    // Merge with DB rooms if available
     try {
       const dbRooms = await db.select().from(voiceRoomsTable).orderBy(desc(voiceRoomsTable.createdAt));
-      if (dbRooms.length > 0) {
-        const rooms = dbRooms.map(dbRoomToData);
-        res.json({ success: true, rooms });
-        return;
+      for (const d of dbRooms) {
+        if (!roomMap.has(d.id)) {
+          const mapped = dbRoomToData(d);
+          if (mapped.access === "Public" && mapped.live) {
+            roomMap.set(d.id, mapped);
+          }
+        }
       }
     } catch {
       // DB offline, fall back to memory
     }
 
-    // Return only public rooms from memory
-    const publicRooms = Array.from(memoryRooms.values()).filter((r) => r.access === "Public" && r.live);
-    res.json({ success: true, rooms: publicRooms });
+    const rooms = Array.from(roomMap.values());
+    res.json({ success: true, rooms });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ success: false, error: message });

@@ -235,7 +235,14 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.rooms) && data.rooms.length > 0) {
-          setRooms(data.rooms);
+          setRooms(prev => {
+            // Merge backend rooms with local state, preserving locally-created rooms
+            const merged = [...data.rooms];
+            prev.forEach(p => {
+              if (!merged.some(m => m.id === p.id)) merged.push(p);
+            });
+            return merged;
+          });
         }
       }
     } catch {
@@ -243,8 +250,50 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
   }, []);
 
+  // Global socket (for rooms list page) to receive real-time room created/deleted events
+  const globalSocketRef = useRef<Socket | null>(null);
+
   useEffect(() => {
+    // Initial fetch
     fetchRooms();
+
+    // Poll every 20 seconds as fallback
+    const pollInterval = setInterval(fetchRooms, 20000);
+
+    // Also connect a lightweight global socket to receive roomCreated events
+    try {
+      const gs = io('/', {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+      });
+      globalSocketRef.current = gs;
+
+      gs.on('roomCreated', (data: any) => {
+        if (data && data.room) {
+          setRooms(prev => {
+            if (prev.some(r => r.id === data.room.id)) return prev;
+            return [data.room, ...prev];
+          });
+        }
+      });
+
+      gs.on('roomDeleted', (data: any) => {
+        if (data && data.roomId) {
+          setRooms(prev => prev.filter(r => r.id !== data.roomId));
+        }
+      });
+    } catch {
+      // Socket not available
+    }
+
+    return () => {
+      clearInterval(pollInterval);
+      if (globalSocketRef.current) {
+        globalSocketRef.current.disconnect();
+        globalSocketRef.current = null;
+      }
+    };
   }, [fetchRooms]);
 
   // Auto-scroll chat to bottom
@@ -833,6 +882,16 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       socket.on('connect_error', () => {
         // Socket.IO not available — voice still works via LiveKit
       });
+
+      // Listen for new rooms created by other users (so All Rooms list updates live)
+      socket.on('roomCreated', (data: any) => {
+        if (data && data.room) {
+          setRooms(prev => {
+            if (prev.some(r => r.id === data.room.id)) return prev;
+            return [data.room, ...prev];
+          });
+        }
+      });
     } catch {
       // Socket.IO not available
     }
@@ -1058,25 +1117,22 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const targetId = hashParams.get('room') || queryParams.get('room') || queryParams.get('voiceroom');
 
       if (targetId && !currentRoomRef.current) {
-        let roomToJoin = rooms.find(r => r.id === targetId || r.name.toLowerCase() === targetId.toLowerCase());
-
-        // If not in local rooms state (e.g. fresh page load via WhatsApp link), query API
-        if (!roomToJoin) {
-          try {
-            const res = await fetch(`/api/voicerooms/${encodeURIComponent(targetId)}`);
-            if (res.ok && isMounted) {
-              const data = await res.json();
-              if (data.success && data.room) {
-                roomToJoin = data.room;
-                setRooms(prev => {
-                  if (prev.some(r => r.id === data.room.id)) return prev;
-                  return [data.room, ...prev];
-                });
-              }
+        // Always fetch from API to avoid stale closure issues — this also works for WhatsApp link joins
+        let roomToJoin: RoomItem | undefined;
+        try {
+          const res = await fetch(`/api/voicerooms/${encodeURIComponent(targetId)}`);
+          if (res.ok && isMounted) {
+            const data = await res.json();
+            if (data.success && data.room) {
+              roomToJoin = data.room;
+              setRooms(prev => {
+                if (prev.some(r => r.id === data.room.id)) return prev;
+                return [data.room, ...prev];
+              });
             }
-          } catch {
-            // Room lookup failed
           }
+        } catch {
+          // Room lookup failed — try local state snapshot (captured at effect creation time)
         }
 
         if (roomToJoin && isMounted) {
@@ -1123,8 +1179,10 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       window.removeEventListener('hashchange', checkUrl);
       window.removeEventListener('popstate', checkUrl);
     };
+    // Run only once on mount — rooms state is not needed as a dependency because
+    // checkUrl fetches from the API directly when the room isn't in local state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rooms]);
+  }, []);
 
   // Leave room
   const leaveRoom = () => {
