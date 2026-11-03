@@ -26,6 +26,8 @@ export interface VoiceRoomData {
   access: "Public" | "Private";
   approval: boolean;
   allowMembers: boolean;
+  allowInvitations?: boolean;
+  password?: string;
   description: string;
   color: string;
   live: boolean;
@@ -314,6 +316,8 @@ router.post("/voicerooms", async (req, res) => {
       access = "Public",
       approval = false,
       allowMembers = true,
+      allowInvitations = true,
+      password = "",
       host = "You",
       hostId: providedHostId,
       initials = "YO",
@@ -344,6 +348,8 @@ router.post("/voicerooms", async (req, res) => {
       access: access === "Private" ? "Private" : "Public",
       approval: Boolean(approval),
       allowMembers: Boolean(allowMembers),
+      allowInvitations: Boolean(allowInvitations),
+      password: String(password || "").trim() || undefined,
       description: description.trim(),
       color,
       live: true,
@@ -484,6 +490,10 @@ router.post("/voicerooms/:id/join", async (req, res) => {
     }
     if (!room.live) {
       res.status(410).json({ success: false, error: "Room has been closed" });
+      return;
+    }
+    if (room.password && room.hostId !== userId && req.body.password !== room.password) {
+      res.status(401).json({ success: false, error: "Incorrect room password" });
       return;
     }
     if (room.locked) {

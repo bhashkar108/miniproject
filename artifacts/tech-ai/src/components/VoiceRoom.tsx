@@ -19,6 +19,8 @@ export interface RoomItem {
   access: 'Public' | 'Private';
   approval: boolean;
   allowMembers?: boolean;
+  allowInvitations?: boolean;
+  password?: string;
   description: string;
   color?: string;
   live: boolean;
@@ -204,6 +206,12 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const [formAccess, setFormAccess] = useState<'Public' | 'Private'>('Public');
   const [formApproval, setFormApproval] = useState(false);
   const [formAllowMembers, setFormAllowMembers] = useState(true);
+  const [formHostName, setFormHostName] = useState('');
+  const [formPassword, setFormPassword] = useState('');
+  const [formAllowInvitations, setFormAllowInvitations] = useState(true);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [pendingPasswordRoom, setPendingPasswordRoom] = useState<RoomItem | null>(null);
 
   // Join Form State
   const [joinUrlInput, setJoinUrlInput] = useState('');
@@ -1276,6 +1284,16 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
   // Open a room
   const openRoom = async (room: RoomItem, autoEnableMic: boolean = false) => {
+    // Check if room requires a password
+    const isRoomHost = room.host === effectiveUserName || room.host === userName || room.created === true;
+    if (room.password && !isRoomHost) {
+      const storedPass = sessionStorage.getItem(`vr_pass_${room.id}`);
+      if (storedPass !== room.password) {
+        setPendingPasswordRoom(room);
+        setPasswordModalOpen(true);
+        return;
+      }
+    }
     if (room.count >= room.capacity) {
       setConnectionStatus('room-full');
       showToast('This room is currently full.');
@@ -1422,7 +1440,9 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     const checkUrl = async () => {
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const queryParams = new URLSearchParams(window.location.search);
-      const targetId = hashParams.get('room') || queryParams.get('room') || queryParams.get('voiceroom');
+      const pathMatch = typeof window !== 'undefined' ? window.location.pathname.match(/\/(?:voiceroom\/room|room)\/([^/?#]+)/i) : null;
+      const pathRoomId = pathMatch ? pathMatch[1] : null;
+      const targetId = pathRoomId || hashParams.get('room') || queryParams.get('room') || queryParams.get('voiceroom');
 
       if (targetId && !currentRoomRef.current) {
         let roomToJoin: RoomItem | undefined;
@@ -1558,17 +1578,20 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
 
     const newRoomId = `room-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const hostName = (formHostName.trim() || effectiveUserName);
     const newRoom: RoomItem = {
       id: newRoomId,
       name,
       category: formCategory,
-      host: effectiveUserName,
-      initials: effectiveUserName.slice(0, 2).toUpperCase(),
+      host: hostName,
+      initials: hostName.slice(0, 2).toUpperCase(),
       count: 1,
       capacity: Number(formCapacity) || 8,
       access: formAccess,
       approval: formApproval,
       allowMembers: formAllowMembers,
+      allowInvitations: formAllowInvitations,
+      password: formPassword.trim() || undefined,
       description: formDesc.trim() || 'Come in and join the conversation.',
       color: 'linear-gradient(135deg,#8b82ff,#56b5e9)',
       live: true,
@@ -2339,6 +2362,30 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
             <div className="vr-two">
               <div className="vr-field">
+                <label htmlFor="vr-hostName">HOST NAME</label>
+                <input
+                  id="vr-hostName"
+                  maxLength={40}
+                  placeholder="Your name as host"
+                  value={formHostName || effectiveUserName}
+                  onChange={e => setFormHostName(e.target.value)}
+                />
+              </div>
+              <div className="vr-field">
+                <label htmlFor="vr-roomPass">ROOM PASSWORD (OPTIONAL)</label>
+                <input
+                  id="vr-roomPass"
+                  type="password"
+                  maxLength={30}
+                  placeholder="Leave empty for open access"
+                  value={formPassword}
+                  onChange={e => setFormPassword(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="vr-two">
+              <div className="vr-field">
                 <label htmlFor="vr-roomCategory">CATEGORY</label>
                 <select
                   id="vr-roomCategory"
@@ -2422,6 +2469,18 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                 type="checkbox"
                 checked={formAllowMembers}
                 onChange={e => setFormAllowMembers(e.target.checked)}
+              />
+            </label>
+
+            <label className="vr-toggleline">
+              <span>
+                Allow participant invitations
+                <small>Permit guests to share and invite their friends</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={formAllowInvitations}
+                onChange={e => setFormAllowInvitations(e.target.checked)}
               />
             </label>
 
@@ -2557,6 +2616,66 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           <p className="vr-muted" style={{ marginTop: 14 }}>
             WhatsApp opens with a pre-filled invitation. Your friends can join directly from their phone, tablet, or PC browser without needing to install anything!
           </p>
+        </div>
+      </div>
+
+      {/* =========================================================================
+          MODAL 4: PASSWORD PROTECTION MODAL
+          ========================================================================= */}
+      <div className={`vr-modalback ${passwordModalOpen ? 'show' : ''}`} onClick={() => setPasswordModalOpen(false)}>
+        <div className="vr-modal" onClick={e => e.stopPropagation()}>
+          <div className="vr-modalhead">
+            <div>
+              <h2>Password Required</h2>
+              <div className="vr-muted">This VoiceRoom is protected by the host.</div>
+            </div>
+            <button
+              type="button"
+              className="vr-close"
+              onClick={() => setPasswordModalOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (pendingPasswordRoom && pendingPasswordRoom.password === passwordInput) {
+              sessionStorage.setItem(`vr_pass_${pendingPasswordRoom.id}`, passwordInput);
+              setPasswordModalOpen(false);
+              setPasswordInput('');
+              openRoom(pendingPasswordRoom, true);
+              showToast('✅ Password accepted! Joining room...');
+            } else {
+              showToast('❌ Incorrect room password. Please try again.');
+            }
+          }}>
+            <div className="vr-field">
+              <label htmlFor="vr-enter-pass">ENTER ROOM PASSWORD</label>
+              <input
+                id="vr-enter-pass"
+                type="password"
+                required
+                placeholder="Password"
+                value={passwordInput}
+                onChange={e => setPasswordInput(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div className="vr-modalactions">
+              <button
+                type="button"
+                className="vr-secondary"
+                onClick={() => setPasswordModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="vr-primary">
+                Unlock & Join Room →
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 
