@@ -318,7 +318,7 @@ router.post("/voicerooms", async (req, res) => {
       allowMembers = true,
       allowInvitations = true,
       password = "",
-      host = "You",
+      host = req.body.hostName || "Host",
       hostId: providedHostId,
       initials = "YO",
       color = "linear-gradient(135deg,#8b82ff,#56b5e9)",

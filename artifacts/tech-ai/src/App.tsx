@@ -177,6 +177,9 @@ async function compressProfilePhoto(file:File):Promise<string> {
 }
 
 async function canvasBlob(canvas: HTMLCanvasElement, mime: string, targetBytes: number): Promise<Blob> {
+  // Clamp target bytes between 50 KB (51,200 B) and 1 MB (1,048,576 B)
+  const clampedTarget = Math.max(51_200, Math.min(1_048_576, targetBytes));
+
   const getBlob = (c: HTMLCanvasElement, q?: number): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       c.toBlob(result => result ? resolve(result) : reject(new Error('Could not compress this document.')), mime, q);
@@ -195,33 +198,99 @@ async function canvasBlob(canvas: HTMLCanvasElement, mime: string, targetBytes: 
     return target;
   };
 
+  // Helper: pad a JPEG ArrayBuffer with standard JPEG COM markers (0xFF 0xFE) to match exact byte count
+  const padJpegToExactBytes = (buffer: ArrayBuffer, targetLen: number): Uint8Array => {
+    const src = new Uint8Array(buffer);
+    if (src.length >= targetLen) return src;
+    const diff = targetLen - src.length;
+    if (diff < 4) {
+      // Small trailing null bytes
+      const out = new Uint8Array(targetLen);
+      out.set(src, 0);
+      return out;
+    }
+
+    // Standard JPEG COM segment: FF FE [2-byte len including len field itself] [payload]
+    const segments: Uint8Array[] = [];
+    let remaining = diff;
+    while (remaining >= 4) {
+      const totalSegSize = Math.min(65535, remaining);
+      if (totalSegSize < 4) {
+        const tail = new Uint8Array(totalSegSize);
+        segments.push(tail);
+        remaining = 0;
+        break;
+      }
+      const seg = new Uint8Array(totalSegSize);
+      seg[0] = 0xFF;
+      seg[1] = 0xFE;
+      const lenField = totalSegSize - 2;
+      seg[2] = (lenField >> 8) & 0xFF;
+      seg[3] = lenField & 0xFF;
+      // fill payload with spaces (ASCII 0x20)
+      seg.fill(0x20, 4);
+      segments.push(seg);
+      remaining -= totalSegSize;
+    }
+    if (remaining > 0) {
+      segments.push(new Uint8Array(remaining));
+    }
+
+    // Insert segments right before the EOI marker (FF D9)
+    let eoiIdx = -1;
+    for (let i = src.length - 2; i >= 0; i--) {
+      if (src[i] === 0xFF && src[i + 1] === 0xD9) {
+        eoiIdx = i;
+        break;
+      }
+    }
+
+    const totalOut = new Uint8Array(targetLen);
+    if (eoiIdx !== -1) {
+      totalOut.set(src.subarray(0, eoiIdx), 0);
+      let curOffset = eoiIdx;
+      for (const seg of segments) {
+        totalOut.set(seg, curOffset);
+        curOffset += seg.length;
+      }
+      totalOut.set(src.subarray(eoiIdx), curOffset);
+    } else {
+      totalOut.set(src, 0);
+      let curOffset = src.length;
+      for (const seg of segments) {
+        totalOut.set(seg, curOffset);
+        curOffset += seg.length;
+      }
+    }
+    return totalOut;
+  };
+
   if (mime === 'image/jpeg') {
-    // 1. Check full scale at high quality
+    // 1. First probe full-scale image size at quality 0.92
     let scale = 1.0;
     let tCanvas = drawScaled(scale);
     let blob = await getBlob(tCanvas, 0.92);
 
-    if (blob.size <= targetBytes) {
-      // Test if even higher quality (0.96) fits under target
-      try {
-        const highBlob = await getBlob(tCanvas, 0.96);
+    // If source is very small at 1.0 scale (smaller than 70% of target), scale up resolution
+    if (blob.size < clampedTarget * 0.70) {
+      const upRatio = Math.min(2.8, Math.sqrt(clampedTarget / Math.max(10_000, blob.size)) * 0.95);
+      if (upRatio > 1.05) {
         tCanvas.width = 0; tCanvas.height = 0;
-        return highBlob.size <= targetBytes ? highBlob : blob;
-      } catch {
-        tCanvas.width = 0; tCanvas.height = 0;
-        return blob;
+        scale = upRatio;
+        tCanvas = drawScaled(scale);
+        blob = await getBlob(tCanvas, 0.92);
       }
     }
 
-    // 2. Binary search quality between 0.08 and 0.92 at scale 1.0
-    let lowQ = 0.08;
-    let highQ = 0.92;
+    // 2. Binary search quality between 0.05 and 0.98 to get as close under target as possible
+    let lowQ = 0.05;
+    let highQ = 0.98;
     let bestUnder: Blob | null = null;
 
-    for (let iter = 0; iter < 7; iter++) {
+    for (let iter = 0; iter < 10; iter++) {
       const midQ = (lowQ + highQ) / 2;
       const b = await getBlob(tCanvas, midQ);
-      if (b.size <= targetBytes) {
+      if (b.size <= clampedTarget) {
         bestUnder = b;
         lowQ = midQ; // try higher quality closer to target
       } else {
@@ -229,87 +298,99 @@ async function canvasBlob(canvas: HTMLCanvasElement, mime: string, targetBytes: 
       }
     }
 
-    // If quality binary search at scale 1.0 found a result that is >= 88% of targetBytes, return it!
-    if (bestUnder && bestUnder.size >= targetBytes * 0.88) {
+    // If scale 1.0 was too large even at low quality (bestUnder is null or < 0.05)
+    if (!bestUnder) {
       tCanvas.width = 0; tCanvas.height = 0;
-      return bestUnder;
-    }
-
-    tCanvas.width = 0; tCanvas.height = 0;
-
-    // 3. Binary search scale & quality iteratively to hit exact targetBytes
-    let lowScale = 0.15;
-    let highScale = 1.0;
-    let candidateBlob: Blob | null = bestUnder;
-
-    for (let sIter = 0; sIter < 6; sIter++) {
-      const midScale = (lowScale + highScale) / 2;
-      const curCanvas = drawScaled(midScale);
-
-      let lQ = 0.2;
-      let hQ = 0.92;
-      let localBest: Blob | null = null;
-
-      for (let qIter = 0; qIter < 5; qIter++) {
-        const mQ = (lQ + hQ) / 2;
-        const b = await getBlob(curCanvas, mQ);
-        if (b.size <= targetBytes) {
-          localBest = b;
-          lQ = mQ;
+      let lowScale = 0.08;
+      let highScale = scale;
+      for (let sIter = 0; sIter < 8; sIter++) {
+        const midScale = (lowScale + highScale) / 2;
+        const curCanvas = drawScaled(midScale);
+        let lQ = 0.08;
+        let hQ = 0.95;
+        let localBest: Blob | null = null;
+        for (let qIter = 0; qIter < 7; qIter++) {
+          const mQ = (lQ + hQ) / 2;
+          const b = await getBlob(curCanvas, mQ);
+          if (b.size <= clampedTarget) {
+            localBest = b;
+            lQ = mQ;
+          } else {
+            hQ = mQ;
+          }
+        }
+        curCanvas.width = 0; curCanvas.height = 0;
+        if (localBest) {
+          bestUnder = localBest;
+          lowScale = midScale;
         } else {
-          hQ = mQ;
+          highScale = midScale;
         }
       }
-
-      curCanvas.width = 0; curCanvas.height = 0;
-
-      if (localBest) {
-        candidateBlob = localBest;
-        if (localBest.size >= targetBytes * 0.94) {
-          return localBest;
-        }
-        lowScale = midScale;
-      } else {
-        highScale = midScale;
-      }
+    } else {
+      tCanvas.width = 0; tCanvas.height = 0;
     }
 
-    if (candidateBlob) return candidateBlob;
-    const fallbackCanvas = drawScaled(0.2);
-    const fb = await getBlob(fallbackCanvas, 0.35);
-    fallbackCanvas.width = 0; fallbackCanvas.height = 0;
-    return fb;
+    const candidate = bestUnder || (await getBlob(drawScaled(0.15), 0.30));
+
+    // 3. Exact Byte Matching: Pad with valid JPEG comment marker so file size equals EXACTLY clampedTarget
+    try {
+      const buf = await candidate.arrayBuffer();
+      if (buf.byteLength < clampedTarget) {
+        const exactBytes = padJpegToExactBytes(buf, clampedTarget);
+        return new Blob([exactBytes.buffer as ArrayBuffer], { type: 'image/jpeg' });
+      }
+    } catch {}
+
+    return candidate;
   } else {
-    // PNG or non-JPEG formats (where quality is ignored by browser canvas)
-    let lowScale = 0.1;
-    let highScale = 1.0;
+    // PNG, WEBP, or other formats
+    let lowScale = 0.05;
+    let highScale = 2.5; // allow upscaling if user requested large size
     let bestUnder: Blob | null = null;
 
     const full = drawScaled(1.0);
     const fullBlob = await getBlob(full);
     full.width = 0; full.height = 0;
-    if (fullBlob.size <= targetBytes) return fullBlob;
 
-    for (let iter = 0; iter < 8; iter++) {
+    if (fullBlob.size < clampedTarget * 0.70) {
+      // Upscale search
+      lowScale = 1.0;
+      highScale = Math.min(3.0, Math.sqrt(clampedTarget / Math.max(10_000, fullBlob.size)) * 1.05);
+    } else if (fullBlob.size <= clampedTarget) {
+      bestUnder = fullBlob;
+      lowScale = 0.8;
+      highScale = 1.4;
+    } else {
+      highScale = 1.0;
+    }
+
+    for (let iter = 0; iter < 10; iter++) {
       const midScale = (lowScale + highScale) / 2;
       const t = drawScaled(midScale);
       const b = await getBlob(t);
       t.width = 0; t.height = 0;
 
-      if (b.size <= targetBytes) {
+      if (b.size <= clampedTarget) {
         bestUnder = b;
-        if (b.size >= targetBytes * 0.94) return b;
         lowScale = midScale;
       } else {
         highScale = midScale;
       }
     }
 
-    if (bestUnder) return bestUnder;
-    const minCanvas = drawScaled(0.12);
-    const minBlob = await getBlob(minCanvas);
-    minCanvas.width = 0; minCanvas.height = 0;
-    return minBlob;
+    const resBlob = bestUnder || (await getBlob(drawScaled(0.10)));
+
+    // For non-JPEG, pad trailing safe bytes if under target to achieve exact byte match
+    try {
+      if (resBlob.size < clampedTarget) {
+        const diff = clampedTarget - resBlob.size;
+        const pad = new Uint8Array(diff);
+        return new Blob([resBlob, pad as BlobPart], { type: mime });
+      }
+    } catch {}
+
+    return resBlob;
   }
 }
 
@@ -971,7 +1052,7 @@ function AppContent() {
     if(!file) return;
     if(docUrl) URL.revokeObjectURL(docUrl);if(processedUrl) URL.revokeObjectURL(processedUrl);
     setDocFile(file);setDocUrl(URL.createObjectURL(file));setProcessedUrl('');setProcessedBlob(null);setProcessedType('');setRotation(0);setCropPercent(0);
-    setOutputFormat(file.type==='application/pdf'?'application/pdf':'image/jpeg');setTargetSizeKb(Math.max(5,Math.round(file.size/1024)));setProcessedSize(null);setMessage('');
+    setOutputFormat(file.type==='application/pdf'?'application/pdf':'image/jpeg');setTargetSizeKb(Math.min(1024,Math.max(50,Math.round(file.size/1024))));setProcessedSize(null);setMessage('');
   };
   const transformDocument = async (rotationOverride=rotation):Promise<boolean> => {
     if(!docFile || !docUrl) return false;
@@ -1008,7 +1089,17 @@ function AppContent() {
           canvas.width=0;canvas.height=0;cropped.width=0;cropped.height=0;sourcePage.cleanup();
         }
         if(output){
-          const pdfBytes=await output.save();const blob=new Blob([pdfBytes.buffer.slice(pdfBytes.byteOffset,pdfBytes.byteOffset+pdfBytes.byteLength) as ArrayBuffer],{type:'application/pdf'});
+          const pdfRaw=await output.save();
+          let pdfFinal: Blob;
+          const targetBytes = Math.max(51_200, Math.min(1_048_576, targetSizeKb * 1024));
+          if (pdfRaw.byteLength < targetBytes) {
+            const padLen = targetBytes - pdfRaw.byteLength;
+            const padComment = new TextEncoder().encode(`\n% PAD-${'0'.repeat(Math.max(0, padLen - 8))}\n`);
+            pdfFinal = new Blob([pdfRaw as BlobPart, padComment.subarray(0, padLen) as BlobPart], { type: 'application/pdf' });
+          } else {
+            pdfFinal = new Blob([pdfRaw.buffer.slice(pdfRaw.byteOffset, pdfRaw.byteOffset + pdfRaw.byteLength) as ArrayBuffer], { type: 'application/pdf' });
+          }
+          const blob = pdfFinal;
           if(processedUrl) URL.revokeObjectURL(processedUrl);
           setProcessedType('application/pdf');setProcessedBlob(blob);setProcessedUrl(URL.createObjectURL(blob));setProcessedSize(blob.size);
         }
@@ -1144,11 +1235,44 @@ function AppContent() {
               <div className="action-row"><button className="button button-primary" onClick={cameraActive?()=>{cameraStream.current?.getTracks().forEach(t=>t.stop());cameraStream.current=null;setCameraActive(false);}:startCamera} data-testid="button-camera">{cameraActive?t('Stop camera'):t('Start camera')}</button><label className="button button-subtle file-button"><ImagePlus size={16}/>{t('Choose file')}<input type="file" accept="image/*,.pdf" onChange={e=>selectDocument(e.target.files?.[0])} data-testid="input-document"/></label><button type="button" className="button button-subtle" onClick={toggleCameraFullscreen} disabled={!cameraActive} title="Expand camera preview"><Maximize2 size={16}/>Full screen</button></div>
               {cameraError&&<p className="error-inline">{cameraError}</p>}
               <div className="tool-divider"/><div className="panel-heading small-heading"><RotateCcw size={16}/><div><h2>{t('Document adjustments')}</h2><p>{t('Applied to a new copy, never the original')}</p></div></div>
-               <div className="action-row"><button className="button button-subtle" disabled={!docFile} onClick={rotateDocument}><RotateCcw size={15}/>{t('Rotate 90°')} <span className="rotation-value">{rotation}°</span></button><button className="button button-primary" disabled={!docFile||processingDoc} onClick={()=>{void transformDocument();}} data-testid="button-process-doc">{processingDoc?<LoaderCircle size={15} className="spin"/>:<Zap size={15}/>} {processingDoc?t('Processing…'):t('Create processed copy')}</button></div>
-               {docFile&&<><label className="field-label">Convert copy to<select value={outputFormat} onChange={e=>setOutputFormat(e.target.value)}><option value="application/pdf">PDF</option><option value="image/png">PNG</option><option value="image/jpeg">JPG / JPEG</option></select></label><label className="field-label crop-control">Crop edges <span>{cropPercent}% · applied on all sides</span><input type="range" min="0" max="18" step="1" value={cropPercent} onChange={e=>setCropPercent(Number(e.target.value))}/><small>Adjust crop, then click "Create processed copy" to update.</small></label><div className="compress-control"><label>File size target <b>{targetSizeKb<1024?`${targetSizeKb} KB`:`${(targetSizeKb/1024).toFixed(2)} MB`}</b></label><input type="range" min="5" max={Math.max(250,Math.ceil(docFile.size/1024*2))} step="5" value={Math.min(targetSizeKb,Math.max(250,Math.ceil(docFile.size/1024*2)))} onChange={e=>setTargetSizeKb(Number(e.target.value))}/><small>Original: {fileSizeLabel(docFile.size)} · left reduces the copy size, right allows a larger copy</small></div>{processedSize!==null&&<div className="size-comparison-row"><span className="size-before">Original: <b>{fileSizeLabel(docFile.size)}</b></span><span className="size-arrow">➔</span><span className="size-after">Processed: <b>{fileSizeLabel(processedSize)}</b></span><span className={`size-delta ${processedSize<=docFile.size?'size-saved':'size-larger'}`}>{processedSize<=docFile.size?`${Math.round((1-processedSize/docFile.size)*100)}% smaller (${fileSizeLabel(docFile.size-processedSize)} saved)`:`${Math.round((processedSize/docFile.size-1)*100)}% larger`}</span></div>}</>}
+               <div className="action-row">
+                <button className="button button-subtle" disabled={!docFile} onClick={rotateDocument} title="Click to rotate image 90 degrees clockwise">
+                  <RotateCcw size={15}/>{t('Rotate 90°')} <span className="rotation-value">{rotation}°</span>
+                </button>
+                <button type="button" className="button button-subtle" disabled={!docFile || rotation === 0} onClick={() => { setRotation(0); setMessage('Rotation reset to 0°. Click "Create processed copy" to apply.'); }} title="Reset rotation back to 0°">
+                  ↺ Reset 0°
+                </button>
+                <button className="button button-primary" disabled={!docFile||processingDoc} onClick={()=>{void transformDocument();}} data-testid="button-process-doc">
+                  {processingDoc?<LoaderCircle size={15} className="spin"/>:<Zap size={15}/>} {processingDoc?t('Processing…'):t('Create processed copy')}
+                </button>
+              </div>
+               {docFile&&<><label className="field-label">Convert copy to<select value={outputFormat} onChange={e=>setOutputFormat(e.target.value)}><option value="application/pdf">PDF</option><option value="image/png">PNG</option><option value="image/jpeg">JPG / JPEG</option></select></label><label className="field-label crop-control">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span>Crop edges <b>{cropPercent}%</b> · margins cropped</span>
+                  <div style={{display:'flex',gap:4}}>
+                    {[0, 5, 10, 15, 20].map(p => (
+                      <button key={p} type="button" onClick={() => setCropPercent(p)} style={{fontSize:'0.72rem',padding:'2px 7px',borderRadius:4,border:'1px solid',borderColor:cropPercent===p?'#6366f1':'#374151',background:cropPercent===p?'#4f46e5':'#1e1e2f',color:'#fff',cursor:'pointer'}}>
+                        {p === 0 ? 'None' : `${p}%`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <input type="range" min="0" max="25" step="1" value={cropPercent} onChange={e=>setCropPercent(Number(e.target.value))}/>
+                <small>Adjust crop borders, then click "Create processed copy" to apply.</small>
+              </label><div className="compress-control">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <label>File size target: <b>{targetSizeKb<1024?`${targetSizeKb} KB`:`${(targetSizeKb/1024).toFixed(2)} MB`}</b> (Range: 50 KB – 1 MB)</label>
+                  <div style={{display:'flex',gap:4}}>
+                    {[50, 100, 200, 350, 500, 1024].map(kb => (
+                      <button key={kb} type="button" onClick={() => setTargetSizeKb(kb)} style={{fontSize:'0.72rem',padding:'2px 6px',borderRadius:4,border:'1px solid',borderColor:targetSizeKb===kb?'#10b981':'#374151',background:targetSizeKb===kb?'#059669':'#1e1e2f',color:'#fff',cursor:'pointer'}}>
+                        {kb === 1024 ? '1 MB' : `${kb} KB`}
+                      </button>
+                    ))}
+                  </div>
+                </div><div style={{display:'flex',gap:8,alignItems:'center',marginTop:4,marginBottom:4}}><input type="number" min="50" max="1024" step="1" value={targetSizeKb} onChange={e=>{const v=Math.min(1024,Math.max(50,Number(e.target.value)||50));setTargetSizeKb(v);}} style={{width:80,padding:'4px 8px',borderRadius:6,border:'1px solid #444',background:'#1a1a2e',color:'#fff',fontSize:'0.85rem',textAlign:'center'}} /><span style={{fontSize:'0.78rem',color:'#8b8ba7'}}>KB (type exact value)</span></div><input type="range" min="50" max="1024" step="1" value={targetSizeKb} onChange={e=>setTargetSizeKb(Number(e.target.value))}/><small>Range: 50 KB → 1 MB · Original: {fileSizeLabel(docFile.size)} · Slide to set exact output file size</small></div>{processedSize!==null&&<div className="size-comparison-row"><span className="size-before">Original: <b>{fileSizeLabel(docFile.size)}</b></span><span className="size-arrow">➔</span><span className="size-after">Processed: <b>{fileSizeLabel(processedSize)}</b></span><span className={`size-delta ${processedSize<=docFile.size?'size-saved':'size-larger'}`}>{processedSize<=docFile.size?`${Math.round((1-processedSize/docFile.size)*100)}% smaller (${fileSizeLabel(docFile.size-processedSize)} saved)`:`${Math.round((processedSize/docFile.size-1)*100)}% larger`}</span><span className="size-accuracy" style={{fontSize:'0.78rem',color:'#10b981',fontWeight:600}}>Target: {targetSizeKb < 1024 ? `${targetSizeKb} KB` : `${(targetSizeKb/1024).toFixed(2)} MB`} · Actual: {fileSizeLabel(processedSize)} · Accuracy: {Math.round(Math.min(100, processedSize / (targetSizeKb * 1024) * 100))}%</span></div>}</>}
               <p className="privacy-note"><ShieldCheck size={14}/>{t('Processing stays in your browser. PDF copies are rasterized; selectable text may not be preserved.')}</p>
             </div>
-             <div className="panel compare-panel"><div className="compare-header"><div><span className="eyebrow">{t('DOCUMENT PREVIEW')}</span><h2>{docFile?.name||t('Your document, side by side')}</h2></div>{docFile&&<div className="doc-zoom-tools"><span className="local-badge">{t('LOCAL PREVIEW')}</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.max(.5,+(value-.1).toFixed(1)))} aria-label="Zoom out" disabled={docZoom<=.5}><ZoomOut size={15}/></button><span>{Math.round(docZoom*100)}%</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.min(1.8,+(value+.1).toFixed(1)))} aria-label="Zoom in" disabled={docZoom>=1.8}><ZoomIn size={15}/></button></div>}</div>{docFile?<div className="compare-grid"><PreviewBox label={t('Original')} file={docFile} url={docUrl} rotation={0} zoom={docZoom}/><PreviewBox label={t('Processed copy')} file={docFile} url={processedUrl} rotation={0} mimeType={processedType} zoom={docZoom}/></div>:<EmptyState icon={<FileImage size={22}/>} title={t('Your document goes here')} body={t('Select or capture an actual file to see its original and processed previews side by side.')}/ >}{processedUrl&&<div className="processed-size-note"><span>Processed copy size: <b>{processedSize===null?'Preparing…':fileSizeLabel(processedSize)}</b></span>{docFile&&<span className="original-compare-label"> (Original: {fileSizeLabel(docFile.size)})</span>}</div>}{processedUrl&&<div className="form-footer"><span className="privacy-note">Actual output size shown above</span><button type="button" className="button button-subtle" onClick={()=>setProcessedFullscreen(true)} title="View processed copy in full screen"><Maximize2 size={15}/>{t('Full screen')}</button><a className="button button-subtle" href={processedUrl} download={`processed-${docFile?.name.replace(/\.[^.]+$/,'')||'document'}.${processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg'}`}><Download size={15}/>{t('Download copy')}</a><button className="button button-primary" onClick={useProcessedInTeacher}><BookOpen size={15}/>Use in AI Teacher</button></div>}</div>
+             <div className="panel compare-panel"><div className="compare-header"><div><span className="eyebrow">{t('DOCUMENT PREVIEW')}</span><h2>{docFile?.name||t('Your document, side by side')}</h2></div>{docFile&&<div className="doc-zoom-tools"><span className="local-badge">{t('LOCAL PREVIEW')}</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.max(.5,+(value-.1).toFixed(1)))} aria-label="Zoom out" disabled={docZoom<=.5}><ZoomOut size={15}/></button><span>{Math.round(docZoom*100)}%</span><button className="icon-button" type="button" onClick={()=>setDocZoom(value=>Math.min(1.8,+(value+.1).toFixed(1)))} aria-label="Zoom in" disabled={docZoom>=1.8}><ZoomIn size={15}/></button></div>}</div>{docFile?<div className="compare-grid"><PreviewBox label={t('Original')} file={docFile} url={docUrl} rotation={rotation} zoom={docZoom}/><PreviewBox label={t('Processed copy')} file={docFile} url={processedUrl} rotation={0} mimeType={processedType} zoom={docZoom}/></div>:<EmptyState icon={<FileImage size={22}/>} title={t('Your document goes here')} body={t('Select or capture an actual file to see its original and processed previews side by side.')}/ >}{processedUrl&&<div className="processed-size-note"><span>Processed copy size: <b>{processedSize===null?'Preparing…':fileSizeLabel(processedSize)}</b></span>{docFile&&<span className="original-compare-label"> (Original: {fileSizeLabel(docFile.size)})</span>}</div>}{processedUrl&&<div className="form-footer"><span className="privacy-note">Actual output size shown above</span><button type="button" className="button button-subtle" onClick={()=>setProcessedFullscreen(true)} title="View processed copy in full screen"><Maximize2 size={15}/>{t('Full screen')}</button><a className="button button-subtle" href={processedUrl} download={`processed-${docFile?.name.replace(/\.[^.]+$/,'')||'document'}.${processedType==='application/pdf'?'pdf':processedType==='image/png'?'png':'jpg'}`}><Download size={15}/>{t('Download copy')}</a><button className="button button-primary" onClick={useProcessedInTeacher}><BookOpen size={15}/>Use in AI Teacher</button></div>}</div>
           </div>
         </section>}
         {module==='equations'&&<section className="page-section"><PageHeading eyebrow={t('EXPLORE THE SHAPE OF AN EQUATION')} title={t('Equation graph')} subtitle={t('Enter a function of x and explore its curve. Try common Math functions such as sin(x), x*x, exp(-x*x), or sqrt(abs(x)).')}/><div className="equation-layout"><div className="panel equation-controls"><div className="panel-heading"><span className="heading-icon violet"><Sigma size={19}/></span><div><h2>{t('Your function')}</h2><p>{t('Graph updates as you type')}</p></div></div><label className="field-label">y = f(x) or x = c<input value={equation} onChange={e=>setEquation(e.target.value)} placeholder="e.g. sin(x) or x=0" className="equation-input" data-testid="input-equation"/></label><label className="field-label">Second equation <span className="field-hint">Optional · compare two local plots</span><input value={secondEquation} onChange={e=>setSecondEquation(e.target.value)} placeholder="e.g. cos(x) or x=2" className="equation-input" data-testid="input-equation-second"/></label><label className="button button-subtle file-button equation-ocr">{recognizeEquation.isPending?<LoaderCircle size={15} className="spin"/>:<Upload size={15}/>} {t('Read equations from an image or PDF')}<input type="file" accept="image/*,.pdf" onChange={event=>recognizeEquationImage(event.target.files?.[0])} data-testid="input-equation-ocr"/></label>{detectedEquations.length>0&&<div className="detected-equations"><span>{t('Detected equations')}</span>{detectedEquations.map((item,index)=><button type="button" key={`${index}-${item}`} onClick={()=>index===0?setEquation(item):setSecondEquation(item)}>{item}</button>)}</div>}<div className="equation-chips"><span>{t('Try')}</span>{['sin(x)','x*x','cos(x)','sqrt(abs(x))','x=0'].map(item=><button key={item} onClick={()=>setEquation(item)}>{item}</button>)}</div><label className="field-label">{t('Horizontal range')} <span className="range-value">−{graphRange} to {graphRange}</span><input type="range" min="2" max="12" value={graphRange} onChange={e=>setGraphRange(Number(e.target.value))} data-testid="input-graph-range"/></label><div className="equation-note"><CircleHelp size={15}/><span>{t('Use x and common math functions. Expression parsing is restricted and runs locally in your browser.')}</span></div></div><div className="panel graph-panel"><div className="graph-heading"><div><span className="eyebrow">{t('LIVE PLOT')}</span><h2>{equation || '…'}{secondEquation?`  ·  ${secondEquation}`:''}</h2></div><span className="graph-range-label">x ∈ [−{graphRange}, {graphRange}]</span></div><div className="graph-container">{graphError?<EmptyState icon={<Sigma size={21}/>} title={t('Enter a valid function')} body={t('Use supported math syntax, for example sin(x) or x*x.')}/>:<svg className="equation-graph" viewBox="0 0 560 300" role="img" aria-label={`${t('Graph of')} ${equation}${secondEquation?` and ${secondEquation}`:''}`}><g className="graph-grid">{Array.from({length:15},(_,i)=><line key={`v${i}`} x1={i*40} x2={i*40} y1="0" y2="300"/>)}{Array.from({length:9},(_,i)=><line key={`h${i}`} x1="0" x2="560" y1={i*37.5} y2={i*37.5}/>)}</g><line className="graph-axis" x1="0" x2="560" y1="150" y2="150"/><line className="graph-axis" x1="280" x2="280" y1="0" y2="300"/>{graphData.curves.map((curve,i)=>curve.valid&&<path key={i} className={`graph-curve graph-curve-${i}`} d={curve.path}/>)}{graphData.curves.flatMap((curve,i)=>curve.valid?curve.points.map((point,j)=><g key={`int-${i}-${j}`}><circle className="graph-intercept" cx={280+point.x/graphRange*280} cy={150-point.y*25} r="4"/><text className="graph-point-label" x={Math.min(495,Math.max(4,280+point.x/graphRange*280+6))} y={Math.min(290,Math.max(14,150-point.y*25-8))}>{point.label}</text></g>):[])}{graphData.intersections.map((point,i)=><g key={`cross-${i}`}><circle className="graph-crossing" cx={280+point.x/graphRange*280} cy={150-point.y*25} r="5"/><text className="graph-point-label" x={Math.min(495,280+point.x/graphRange*280+7)} y={Math.max(14,150-point.y*25-8)}>{point.label}</text></g>)}<text className="graph-label" x="535" y="143">x</text><text className="graph-label" x="288" y="14">y</text></svg>}</div><div className="graph-footer"><span><i className="curve-key"/>f(x) · intercepts and crossings</span><span>{t('Scale updates with your selected range')}</span></div></div></div></section>}
