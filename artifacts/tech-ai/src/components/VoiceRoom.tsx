@@ -188,6 +188,9 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const peerRef = useRef<any>(null);
   const dataConnsRef = useRef<Map<string, any>>(new Map());
   const activeCallsRef = useRef<Map<string, any>>(new Map());
+  const myPeerIdRef = useRef<string>('');
+  const retryCountRef = useRef<number>(0);
+  const hostPeerIdRef = useRef<string>('');
 
   const [micEnabled, setMicEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -499,20 +502,56 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
   };
 
-  // Play remote audio from a peer and monitor speaking level
+  // Helper to create a silent audio stream so WebRTC calls never fail even before mic permission
+  const createSilentAudioStream = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0; // completely silent
+      osc.connect(gain);
+      const dest = ctx.createMediaStreamDestination();
+      gain.connect(dest);
+      osc.start();
+      return dest.stream;
+    } catch {
+      return new MediaStream();
+    }
+  }, []);
+
+  // Play remote audio from a peer and monitor speaking level with reliable browser autoplay
   const attachRemoteAudio = useCallback((peerId: string, remoteStream: MediaStream) => {
     let audio = remoteAudioElementsRef.current.get(peerId);
     if (!audio) {
       audio = new Audio();
       audio.autoplay = true;
       (audio as any).playsInline = true;
+      audio.muted = false;
+      audio.volume = 1.0;
       remoteAudioElementsRef.current.set(peerId, audio);
       audioContainerRef.current?.appendChild(audio);
     }
     audio.srcObject = remoteStream;
-    audio.play().catch(e => console.warn('P2P audio play policy:', e));
 
-    // Monitor remote audio volume to animate speaking indicator
+    // Guaranteed autoplay handling across mobile Safari & Chrome
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        console.log('Audio stream actively playing for peer:', peerId);
+      }).catch((err) => {
+        console.warn('Autoplay waiting for user gesture:', err);
+        const unlock = () => {
+          audio?.play();
+          document.removeEventListener('click', unlock);
+          document.removeEventListener('touchstart', unlock);
+        };
+        document.addEventListener('click', unlock, { once: true });
+        document.addEventListener('touchstart', unlock, { once: true });
+      });
+    }
+
+    // Monitor remote audio volume to animate speaking indicator in real-time
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
@@ -522,72 +561,201 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       source.connect(analyser);
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
+      let isLoopRunning = true;
       const checkRemoteSpeaking = () => {
-        if (!audioContextRef.current) return;
+        if (!isLoopRunning) return;
         analyser.getByteFrequencyData(dataArray);
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        const isSpeakingRemote = (sum / dataArray.length) > 18;
+        const isSpeakingRemote = (sum / dataArray.length) > 12;
+
+        const isHost = peerId === hostPeerIdRef.current || peerId.endsWith('_host');
+        if (isHost) {
+          setHostSpeaking(isSpeakingRemote);
+        }
 
         setPeerParticipants(prev =>
-          prev.map(p => (p.socketId === peerId || p.id === peerId ? { ...p, isSpeaking: isSpeakingRemote } : p))
+          prev.map(p => (p.socketId === peerId || p.id === peerId) ? { ...p, isSpeaking: isSpeakingRemote } : p)
         );
         requestAnimationFrame(checkRemoteSpeaking);
       };
       requestAnimationFrame(checkRemoteSpeaking);
-    } catch {}
+    } catch (e) {
+      console.warn('Remote audio analyser setup:', e);
+    }
   }, []);
 
-  // Setup PeerJS data connection for real-time chat & presence
+  // Call a peer with microphone audio stream
+  const callPeerWithAudio = useCallback((targetPeerId: string, streamOverride?: MediaStream) => {
+    const peer = peerRef.current;
+    if (!peer || peer.destroyed || !targetPeerId) return;
+
+    // If an active call already exists and is open, do not duplicate
+    const existing = activeCallsRef.current.get(targetPeerId);
+    if (existing && existing.open) return;
+
+    const stream = streamOverride || mediaStreamRef.current || createSilentAudioStream();
+    try {
+      console.log('Initiating WebRTC voice call to peer:', targetPeerId);
+      const call = peer.call(targetPeerId, stream);
+      if (call) {
+        activeCallsRef.current.set(targetPeerId, call);
+        call.on('stream', (remoteStream: MediaStream) => {
+          console.log('Received remote audio stream from peer:', targetPeerId);
+          attachRemoteAudio(targetPeerId, remoteStream);
+        });
+        call.on('close', () => {
+          activeCallsRef.current.delete(targetPeerId);
+        });
+        call.on('error', (err: any) => {
+          console.warn('Call error with peer:', targetPeerId, err);
+        });
+      }
+    } catch (e) {
+      console.warn('peer.call invocation notice:', e);
+    }
+  }, [attachRemoteAudio, createSilentAudioStream]);
+
+  // Setup PeerJS data connection for real-time chat, presence, and host controls
   const setupDataConnection = useCallback((conn: any) => {
     conn.on('data', (data: any) => {
       if (!data) return;
+
+      // 1. Live Chat
       if (data.type === 'CHAT_MSG' && data.message) {
         setChatMessages(prev => {
           if (prev.some(m => m.id === data.message.id)) return prev;
           return [...prev, data.message];
         });
-      } else if (data.type === 'SPEAKING_UPDATE') {
+      }
+
+      // 2. Speaking indicator sync
+      else if (data.type === 'SPEAKING_UPDATE') {
         const { userName: senderName, isSpeaking: peerSpeaking } = data;
-        if (senderName && senderName !== effectiveUserName) {
-          setPeerParticipants(prev => {
-            const exists = prev.find(p => p.name === senderName);
-            if (exists) {
-              return prev.map(p => (p.name === senderName ? { ...p, isSpeaking: peerSpeaking } : p));
+        if (currentRoomRef.current && (senderName === currentRoomRef.current.host || data.isHost)) {
+          setHostSpeaking(Boolean(peerSpeaking));
+        }
+        setPeerParticipants(prev =>
+          prev.map(p => (p.name === senderName || p.socketId === conn.peer)
+            ? { ...p, isSpeaking: Boolean(peerSpeaking) }
+            : p
+          )
+        );
+      }
+
+      // 3. Guest joined: Host handles and admits the guest
+      else if (data.type === 'JOIN') {
+        const guestName = (data.userName || 'Friend').trim();
+        const guestId = data.userId || conn.peer;
+        const guestPeerId = data.peerId || conn.peer;
+
+        // Add guest to peer participants list on Host stage
+        setPeerParticipants(prev => {
+          if (prev.some(p => p.id === guestId || p.socketId === guestPeerId || p.name === guestName)) {
+            return prev.map(p => (p.id === guestId || p.socketId === guestPeerId || p.name === guestName)
+              ? { ...p, name: guestName, socketId: guestPeerId, id: guestId }
+              : p
+            );
+          }
+          return [
+            ...prev,
+            {
+              name: guestName,
+              initials: guestName.slice(0, 2).toUpperCase(),
+              role: 'On Stage',
+              color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+              isSpeaking: false,
+              socketId: guestPeerId,
+              id: guestId,
             }
-            return [
-              ...prev,
-              {
-                name: senderName,
-                initials: senderName.slice(0, 2).toUpperCase(),
-                role: peerSpeaking ? 'Speaking' : 'Stage Member',
-                color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
-                isSpeaking: peerSpeaking,
-                socketId: conn.peer,
-              }
-            ];
+          ];
+        });
+
+        showToast(`👋 ${guestName} joined your room! You can now talk live.`);
+
+        // Reply to Guest with WELCOME message containing Host information
+        try {
+          conn.send({
+            type: 'WELCOME',
+            hostName: currentRoomRef.current?.host || effectiveUserName,
+            hostId: effectiveUserId,
+            roomName: currentRoomRef.current?.name,
+            locked: roomLocked,
+            chatEnabled: chatEnabled,
           });
+        } catch {}
+
+        // Host immediately calls Guest with microphone audio
+        setTimeout(() => {
+          callPeerWithAudio(guestPeerId);
+        }, 300);
+
+        // Forward new guest info to all other connected peers (for mesh calling)
+        dataConnsRef.current.forEach((otherConn, otherPeerId) => {
+          if (otherPeerId !== conn.peer) {
+            try {
+              otherConn.send({
+                type: 'PEER_JOINED',
+                peerId: guestPeerId,
+                userName: guestName,
+                userId: guestId,
+              });
+            } catch {}
+          }
+        });
+      }
+
+      // 4. Welcome received by Guest from Host
+      else if (data.type === 'WELCOME') {
+        if (data.hostName) {
+          setCurrentRoom(prev => prev ? { ...prev, host: data.hostName } : null);
         }
-      } else if (data.type === 'JOIN') {
-        const { userName: newGuestName, userId: newGuestId } = data;
-        if (newGuestName && newGuestName !== effectiveUserName) {
-          setPeerParticipants(prev => {
-            if (prev.some(p => p.name === newGuestName)) return prev;
-            return [
-              ...prev,
-              {
-                name: newGuestName,
-                initials: newGuestName.slice(0, 2).toUpperCase(),
-                role: 'Stage Member',
-                color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
-                isSpeaking: false,
-                socketId: conn.peer,
-                id: newGuestId,
-              }
-            ];
-          });
-          showToast(`👋 ${newGuestName} joined the room! You are talking together live.`);
+        if (data.locked !== undefined) setRoomLocked(data.locked);
+        if (data.chatEnabled !== undefined) setChatEnabled(data.chatEnabled);
+        showToast(`🎙️ Connected with Host ${data.hostName || 'Host'}! Speak freely on stage.`);
+
+        // Guest calls host with microphone audio to ensure bidirectional call
+        setTimeout(() => {
+          callPeerWithAudio(conn.peer);
+        }, 300);
+      }
+
+      // 5. Another peer joined the room (for multi-user mesh calling)
+      else if (data.type === 'PEER_JOINED') {
+        const { peerId: remotePeerId, userName: remoteName, userId: remoteId } = data;
+        setPeerParticipants(prev => {
+          if (prev.some(p => p.id === remoteId || p.socketId === remotePeerId || p.name === remoteName)) return prev;
+          return [
+            ...prev,
+            {
+              name: remoteName || 'Member',
+              initials: (remoteName || 'M').slice(0, 2).toUpperCase(),
+              role: 'On Stage',
+              color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+              isSpeaking: false,
+              socketId: remotePeerId,
+              id: remoteId || remotePeerId,
+            }
+          ];
+        });
+
+        // Call this peer for audio
+        if (remotePeerId) {
+          callPeerWithAudio(remotePeerId);
         }
+      }
+
+      // 6. Host controls: Room lock, chat toggle, capacity update
+      else if (data.type === 'ROOM_UPDATE') {
+        if (data.locked !== undefined) setRoomLocked(data.locked);
+        if (data.chatEnabled !== undefined) setChatEnabled(data.chatEnabled);
+        if (data.capacity !== undefined) setCurrentRoom(p => p ? { ...p, capacity: data.capacity } : null);
+      }
+
+      // 7. Host closed room
+      else if (data.type === 'ROOM_CLOSE') {
+        showToast('Room has been closed by the host.');
+        leaveRoom();
       }
     });
 
@@ -599,49 +767,44 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         audio.remove();
         remoteAudioElementsRef.current.delete(conn.peer);
       }
+      activeCallsRef.current.delete(conn.peer);
       setPeerParticipants(prev => prev.filter(p => p.socketId !== conn.peer && p.id !== conn.peer));
     });
-  }, [effectiveUserName]);
+  }, [effectiveUserName, effectiveUserId, roomLocked, chatEnabled, callPeerWithAudio]);
 
   // Connect to Host Peer (when joining as guest)
-  const connectToHostPeer = useCallback((hostPeerId: string) => {
+  const connectToHostPeer = useCallback((targetHostPeerId: string) => {
     const peer = peerRef.current;
-    if (!peer || peer.destroyed) return;
+    if (!peer || peer.destroyed || !targetHostPeerId) return;
 
-    // Call host with local microphone stream
-    const localStream = mediaStreamRef.current;
-    if (localStream) {
-      try {
-        const call = peer.call(hostPeerId, localStream);
-        if (call) {
-          activeCallsRef.current.set(hostPeerId, call);
-          call.on('stream', (remoteStream: MediaStream) => {
-            attachRemoteAudio(hostPeerId, remoteStream);
-          });
-        }
-      } catch (e) {
-        console.warn('PeerJS call host error:', e);
-      }
-    }
-
-    // Connect data channel for live text chat & presence
     try {
-      const conn = peer.connect(hostPeerId);
+      console.log('Connecting data channel to host:', targetHostPeerId);
+      const conn = peer.connect(targetHostPeerId, { reliable: true });
       if (conn) {
         setupDataConnection(conn);
-        conn.on('open', () => {
-          dataConnsRef.current.set(hostPeerId, conn);
+
+        const sendJoin = () => {
+          dataConnsRef.current.set(targetHostPeerId, conn);
           conn.send({
             type: 'JOIN',
             userId: effectiveUserId,
             userName: effectiveUserName,
+            peerId: peer.id,
           });
-        });
+          // Initiate voice call to host with microphone
+          callPeerWithAudio(targetHostPeerId);
+        };
+
+        if (conn.open) {
+          sendJoin();
+        } else {
+          conn.on('open', sendJoin);
+        }
       }
     } catch (e) {
       console.warn('PeerJS data connect host error:', e);
     }
-  }, [attachRemoteAudio, setupDataConnection, effectiveUserId, effectiveUserName]);
+  }, [setupDataConnection, effectiveUserId, effectiveUserName, callPeerWithAudio]);
 
   // Initialize PeerJS for Room
   const initPeerJS = useCallback((roomId: string, isHostRole: boolean) => {
@@ -656,11 +819,15 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       peerRef.current = null;
     }
 
-    const cleanRoomId = roomId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const myPeerId = isHostRole
-      ? `techai_${cleanRoomId}_host`
-      : `techai_${cleanRoomId}_peer_${Math.random().toString(36).substring(2, 7)}`;
+    const cleanRoomId = roomId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32);
     const hostPeerId = `techai_${cleanRoomId}_host`;
+    const myPeerId = isHostRole
+      ? hostPeerId
+      : `techai_${cleanRoomId}_peer_${Math.random().toString(36).substring(2, 7)}`;
+
+    myPeerIdRef.current = myPeerId;
+    hostPeerIdRef.current = hostPeerId;
+    retryCountRef.current = 0;
 
     try {
       const peer = new PeerConstructor(myPeerId, {
@@ -669,6 +836,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
             { urls: 'stun:global.stun.twilio.com:3478' },
           ]
         }
@@ -680,19 +848,28 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
         setConnectionStatus('connected');
 
         if (!isHostRole) {
+          // Connect to Host with retry if host is still registering
           setTimeout(() => {
             connectToHostPeer(hostPeerId);
-          }, 600);
+          }, 400);
         }
       });
 
-      // Handle incoming voice call from peer
+      // Handle incoming voice call from peer or host
       peer.on('call', (call: any) => {
+        console.log('Incoming WebRTC voice call from:', call.peer);
         activeCallsRef.current.set(call.peer, call);
-        const localStream = mediaStreamRef.current;
+        const localStream = mediaStreamRef.current || createSilentAudioStream();
         call.answer(localStream);
         call.on('stream', (remoteStream: MediaStream) => {
+          console.log('Voice call answered! Receiving audio from:', call.peer);
           attachRemoteAudio(call.peer, remoteStream);
+        });
+        call.on('close', () => {
+          activeCallsRef.current.delete(call.peer);
+        });
+        call.on('error', (err: any) => {
+          console.warn('Call error with peer', call.peer, err);
         });
       });
 
@@ -704,20 +881,31 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
 
       peer.on('error', (err: any) => {
         console.warn('PeerJS event:', err.type, err.message);
-        if (err.type === 'unavailable-id' && isHostRole) {
-          const fallbackId = `techai_${cleanRoomId}_host_${Math.random().toString(36).substring(2, 5)}`;
-          try {
-            const p2 = new PeerConstructor(fallbackId, {
-              config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-            });
-            peerRef.current = p2;
-          } catch {}
+        if (err.type === 'peer-unavailable' && !isHostRole) {
+          // Host may still be registering on PeerJS cloud — retry
+          if (retryCountRef.current < 6) {
+            retryCountRef.current += 1;
+            console.log(`Retrying connection to host peer (${retryCountRef.current}/6)...`);
+            setTimeout(() => {
+              connectToHostPeer(hostPeerId);
+            }, 1200);
+          }
+        } else if (err.type === 'unavailable-id' && isHostRole) {
+          // If host ID temporarily busy, destroy and retry clean after 1s
+          setTimeout(() => {
+            try {
+              const p2 = new PeerConstructor(hostPeerId, {
+                config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+              });
+              peerRef.current = p2;
+            } catch {}
+          }, 1000);
         }
       });
     } catch (e) {
       console.warn('PeerJS init failed:', e);
     }
-  }, [connectToHostPeer, attachRemoteAudio, setupDataConnection]);
+  }, [connectToHostPeer, attachRemoteAudio, setupDataConnection, createSilentAudioStream]);
 
   // Create or retrieve an RTCPeerConnection for a peer
   const createPeerConnection = useCallback((targetSocketId: string) => {
@@ -808,7 +996,31 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       mediaStreamRef.current = stream;
       setupVoiceDetection(stream);
 
-      // Attach track to all existing P2P peer connections
+      // 1. Attach live microphone track to all active PeerJS voice calls
+      const liveTrack = stream.getAudioTracks()[0];
+      if (liveTrack) {
+        activeCallsRef.current.forEach((call) => {
+          try {
+            const pc = (call as any).peerConnection as RTCPeerConnection;
+            if (pc) {
+              const sender = pc.getSenders().find(s => s.track?.kind === 'audio');
+              if (sender) {
+                sender.replaceTrack(liveTrack);
+              }
+            }
+          } catch {}
+        });
+      }
+
+      // 2. Call any connected peers who don't have an active audio call yet
+      dataConnsRef.current.forEach((conn, peerId) => {
+        callPeerWithAudio(peerId, stream);
+      });
+      if (hostPeerIdRef.current && !isHost) {
+        callPeerWithAudio(hostPeerIdRef.current, stream);
+      }
+
+      // 3. Attach track to all existing RTCPeerConnections
       peerConnectionsRef.current.forEach((pc) => {
         stream.getAudioTracks().forEach(track => {
           const senders = pc.getSenders();
@@ -1287,6 +1499,11 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     const newLocked = !roomLocked;
     setRoomLocked(newLocked);
     setCurrentRoom(prev => prev ? { ...prev, locked: newLocked } : null);
+    try {
+      dataConnsRef.current.forEach(conn => {
+        try { conn.send({ type: 'ROOM_UPDATE', locked: newLocked }); } catch {}
+      });
+    } catch {}
 
     if (socketRef.current) {
       socketRef.current.emit('roomUpdate', { roomId: currentRoom.id, locked: newLocked });
@@ -1313,6 +1530,11 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const hostCloseRoom = async () => {
     if (!currentRoom) return;
     const roomId = currentRoom.id;
+    try {
+      dataConnsRef.current.forEach(conn => {
+        try { conn.send({ type: 'ROOM_CLOSE' }); } catch {}
+      });
+    } catch {}
     if (socketRef.current) {
       socketRef.current.emit('roomClose', { roomId, hostName: effectiveUserName });
     }
@@ -1367,6 +1589,11 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     const newEnabled = !chatEnabled;
     setChatEnabled(newEnabled);
     setCurrentRoom(prev => prev ? { ...prev, chatEnabled: newEnabled } : null);
+    try {
+      dataConnsRef.current.forEach(conn => {
+        try { conn.send({ type: 'ROOM_UPDATE', chatEnabled: newEnabled }); } catch {}
+      });
+    } catch {}
 
     if (socketRef.current) {
       socketRef.current.emit('roomUpdate', { roomId: currentRoom.id, chatEnabled: newEnabled });
@@ -1464,18 +1691,50 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const bc = new BroadcastChannel(`voiceroom_${room.id}`);
       broadcastChannelRef.current = bc;
       bc.onmessage = (event) => {
-        const { type, message, userName: senderName, isSpeaking: peerSpeaking } = event.data || {};
+        const { type, message, userName: senderName, isSpeaking: peerSpeaking, userId: senderId, hostName: welcomeHost } = event.data || {};
         if (type === 'CHAT_MSG' && message) {
           setChatMessages(prev => {
             if (prev.some(m => m.id === message.id)) return prev;
             return [...prev, message];
           });
         }
-        if (type === 'SPEAKING_UPDATE' && senderName && senderName !== effectiveUserName) {
+        else if (type === 'BC_JOIN' && senderId && senderId !== effectiveUserId) {
+          // Guest joined via BroadcastChannel (same browser tab test)
+          const gName = senderName || 'Guest';
           setPeerParticipants(prev => {
-            const exists = prev.find(p => p.name === senderName);
+            if (prev.some(p => p.id === senderId || p.name === gName)) return prev;
+            return [
+              ...prev,
+              {
+                name: gName,
+                initials: gName.slice(0, 2).toUpperCase(),
+                role: 'On Stage',
+                color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+                isSpeaking: false,
+                id: senderId,
+              }
+            ];
+          });
+          // Host replies with BC_WELCOME
+          if (isHostRole) {
+            bc.postMessage({
+              type: 'BC_WELCOME',
+              hostName: currentRoomRef.current?.host || effectiveUserName,
+              hostId: effectiveUserId,
+            });
+          }
+        }
+        else if (type === 'BC_WELCOME' && welcomeHost) {
+          setCurrentRoom(prev => prev ? { ...prev, host: welcomeHost } : null);
+        }
+        else if (type === 'SPEAKING_UPDATE' && senderName && senderName !== effectiveUserName) {
+          if (currentRoomRef.current && (senderName === currentRoomRef.current.host)) {
+            setHostSpeaking(Boolean(peerSpeaking));
+          }
+          setPeerParticipants(prev => {
+            const exists = prev.find(p => p.name === senderName || p.id === senderId);
             if (exists) {
-              return prev.map(p => (p.name === senderName ? { ...p, isSpeaking: peerSpeaking } : p));
+              return prev.map(p => (p.name === senderName || p.id === senderId) ? { ...p, isSpeaking: peerSpeaking } : p);
             }
             return [
               ...prev,
@@ -1485,11 +1744,18 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
                 role: peerSpeaking ? 'Speaking' : 'Listening',
                 color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
                 isSpeaking: peerSpeaking,
+                id: senderId,
               }
             ];
           });
         }
       };
+      // Send BC_JOIN announcement to other tabs
+      bc.postMessage({
+        type: 'BC_JOIN',
+        userId: effectiveUserId,
+        userName: effectiveUserName,
+      });
     } catch {}
 
     // LiveKit token request
