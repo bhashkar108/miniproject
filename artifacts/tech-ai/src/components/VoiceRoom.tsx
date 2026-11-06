@@ -185,6 +185,8 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
   const peerRef = useRef<any>(null);
   const dataConnsRef = useRef<Map<string, any>>(new Map());
   const activeCallsRef = useRef<Map<string, any>>(new Map());
+  const roomMembersRef = useRef<Map<string, { peerId: string; userName: string; userId: string; isHost?: boolean }>>(new Map());
+  const myPeerIdRef = useRef<string>('');
 
   const [micEnabled, setMicEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -471,18 +473,73 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     }
   };
 
-  // Play remote audio from a peer and monitor speaking level
-  const attachRemoteAudio = useCallback((peerId: string, remoteStream: MediaStream) => {
+  // Create silent audio stream as guaranteed placeholder so WebRTC call handshake never fails
+  const createSilentAudioStream = useCallback((): MediaStream => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const dst = ctx.createMediaStreamDestination();
+      osc.connect(dst);
+      osc.start();
+      const track = dst.stream.getAudioTracks()[0];
+      track.enabled = false;
+      return new MediaStream([track]);
+    } catch {
+      return new MediaStream();
+    }
+  }, []);
+
+  // Ensure local stream is ready for calling & answering immediately
+  const ensureLocalStream = useCallback(async (): Promise<MediaStream> => {
+    if (mediaStreamRef.current && mediaStreamRef.current.active && mediaStreamRef.current.getAudioTracks().length > 0) {
+      return mediaStreamRef.current;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      mediaStreamRef.current = stream;
+      setupVoiceDetection(stream);
+      setMicEnabled(true);
+      return stream;
+    } catch (err) {
+      console.warn('Microphone permission pending or denied; using silent placeholder:', err);
+      const silent = createSilentAudioStream();
+      mediaStreamRef.current = silent;
+      return silent;
+    }
+  }, [createSilentAudioStream]);
+
+  // Play remote audio from a peer with guaranteed autoplay unlock and volume monitoring
+  const playRemoteAudio = useCallback((peerId: string, remoteStream: MediaStream) => {
     let audio = remoteAudioElementsRef.current.get(peerId);
     if (!audio) {
-      audio = new Audio();
+      audio = document.createElement('audio');
       audio.autoplay = true;
       (audio as any).playsInline = true;
+      audio.setAttribute('playsinline', 'true');
+      audio.setAttribute('autoplay', 'true');
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
       remoteAudioElementsRef.current.set(peerId, audio);
-      audioContainerRef.current?.appendChild(audio);
     }
     audio.srcObject = remoteStream;
-    audio.play().catch(e => console.warn('P2P audio play policy:', e));
+    audio.volume = 1.0;
+
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(e => {
+        console.warn('Playback gesture required on this browser:', e);
+        const unlock = () => {
+          audio?.play().catch(() => {});
+          document.removeEventListener('click', unlock);
+          document.removeEventListener('touchstart', unlock);
+        };
+        document.addEventListener('click', unlock, { once: true });
+        document.addEventListener('touchstart', unlock, { once: true });
+      });
+    }
 
     // Monitor remote audio volume to animate speaking indicator
     try {
@@ -491,11 +548,12 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       const source = ctx.createMediaStreamSource(remoteStream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 64;
+      analyser.smoothingTimeConstant = 0.5;
       source.connect(analyser);
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
       const checkRemoteSpeaking = () => {
-        if (!audioContextRef.current) return;
+        if (!remoteAudioElementsRef.current.has(peerId)) return;
         analyser.getByteFrequencyData(dataArray);
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
@@ -510,61 +568,226 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     } catch {}
   }, []);
 
-  // Setup PeerJS data connection for real-time chat & presence
-  const setupDataConnection = useCallback((conn: any) => {
+  // Initiate an audio call to a target peer
+  const initiateAudioCall = useCallback(async (targetPeerId: string) => {
+    const peer = peerRef.current;
+    if (!peer || peer.destroyed) return;
+    if (activeCallsRef.current.has(targetPeerId)) return;
+
+    try {
+      const localStream = await ensureLocalStream();
+      const call = peer.call(targetPeerId, localStream);
+      if (call) {
+        activeCallsRef.current.set(targetPeerId, call);
+        call.on('stream', (rem: MediaStream) => {
+          playRemoteAudio(targetPeerId, rem);
+        });
+        call.on('close', () => {
+          activeCallsRef.current.delete(targetPeerId);
+        });
+        call.on('error', (err: any) => {
+          console.warn('Call error to', targetPeerId, err);
+          activeCallsRef.current.delete(targetPeerId);
+        });
+      }
+    } catch (e) {
+      console.warn('Initiate call error:', e);
+    }
+  }, [ensureLocalStream, playRemoteAudio]);
+
+  // Setup PeerJS data connection for real-time chat & presence with HOST RELAY for entire group
+  const setupDataConnection = useCallback((conn: any, isHostRole: boolean) => {
     conn.on('data', (data: any) => {
       if (!data) return;
+
+      // 1. Group Chat Message (Unified chat for everyone in the room)
       if (data.type === 'CHAT_MSG' && data.message) {
         setChatMessages(prev => {
           if (prev.some(m => m.id === data.message.id)) return prev;
           return [...prev, data.message];
         });
-      } else if (data.type === 'SPEAKING_UPDATE') {
-        const { userName: senderName, isSpeaking: peerSpeaking } = data;
-        if (senderName && senderName !== effectiveUserName) {
-          setPeerParticipants(prev => {
-            const exists = prev.find(p => p.name === senderName);
-            if (exists) {
-              return prev.map(p => (p.name === senderName ? { ...p, isSpeaking: peerSpeaking } : p));
+
+        // HOST RELAYS CHAT MESSAGE TO ALL OTHER GUESTS!
+        if (isHostRole) {
+          dataConnsRef.current.forEach((c, pid) => {
+            if (pid !== conn.peer) {
+              try { c.send(data); } catch {}
             }
-            return [
-              ...prev,
-              {
-                name: senderName,
-                initials: senderName.slice(0, 2).toUpperCase(),
-                role: peerSpeaking ? 'Speaking' : 'Stage Member',
-                color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
-                isSpeaking: peerSpeaking,
-                socketId: conn.peer,
-              }
-            ];
           });
         }
-      } else if (data.type === 'JOIN') {
-        const { userName: newGuestName, userId: newGuestId } = data;
-        if (newGuestName && newGuestName !== effectiveUserName) {
+      }
+
+      // 2. Speaking indicator update
+      else if (data.type === 'SPEAKING_UPDATE') {
+        const { userName: senderName, isSpeaking: peerSpeaking } = data;
+        if (senderName && senderName !== effectiveUserName) {
+          setPeerParticipants(prev =>
+            prev.map(p => (p.name === senderName ? { ...p, isSpeaking: peerSpeaking } : p))
+          );
+          // Host relays speaking indicator to all other guests
+          if (isHostRole) {
+            dataConnsRef.current.forEach((c, pid) => {
+              if (pid !== conn.peer) {
+                try { c.send(data); } catch {}
+              }
+            });
+          }
+        }
+      }
+
+      // 3. Guest joins room
+      else if (data.type === 'JOIN') {
+        const { peerId: guestPeerId, userName: guestName, userId: guestId } = data;
+        if (guestName && guestName !== effectiveUserName) {
+          // Register in members list
+          roomMembersRef.current.set(guestPeerId, {
+            peerId: guestPeerId,
+            userName: guestName,
+            userId: guestId,
+          });
+
+          // Add to participants state
           setPeerParticipants(prev => {
-            if (prev.some(p => p.name === newGuestName)) return prev;
+            if (prev.some(p => p.socketId === guestPeerId || p.name === guestName)) return prev;
             return [
               ...prev,
               {
-                name: newGuestName,
-                initials: newGuestName.slice(0, 2).toUpperCase(),
+                name: guestName,
+                initials: guestName.slice(0, 2).toUpperCase(),
                 role: 'Stage Member',
                 color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
                 isSpeaking: false,
-                socketId: conn.peer,
-                id: newGuestId,
+                socketId: guestPeerId,
+                id: guestId,
               }
             ];
           });
-          showToast(`👋 ${newGuestName} joined the room! You are talking together live.`);
+
+          showToast(`👋 ${guestName} joined the room! You are talking together live.`);
+
+          // Host sends back full room member directory to the newly joined guest
+          if (isHostRole) {
+            conn.send({
+              type: 'ROOM_SYNC',
+              members: Array.from(roomMembersRef.current.values()),
+              hostPeerId: myPeerIdRef.current,
+              hostName: effectiveUserName,
+            });
+
+            // Host broadcasts to all OTHER existing guests that a new peer joined
+            dataConnsRef.current.forEach((c, pid) => {
+              if (pid !== guestPeerId) {
+                try {
+                  c.send({
+                    type: 'PEER_JOINED',
+                    peer: { peerId: guestPeerId, userName: guestName, userId: guestId }
+                  });
+                } catch {}
+              }
+            });
+
+            // Host initiates audio call to the new guest!
+            setTimeout(() => {
+              initiateAudioCall(guestPeerId);
+            }, 300);
+          }
+        }
+      }
+
+      // 4. Guest receives Room Member Directory from Host
+      else if (data.type === 'ROOM_SYNC' && Array.isArray(data.members)) {
+        data.members.forEach((mem: any) => {
+          if (mem.userName !== effectiveUserName && mem.peerId !== myPeerIdRef.current) {
+            roomMembersRef.current.set(mem.peerId, mem);
+
+            setPeerParticipants(prev => {
+              if (prev.some(p => p.socketId === mem.peerId || p.name === mem.userName)) return prev;
+              return [
+                ...prev,
+                {
+                  name: mem.userName,
+                  initials: mem.userName.slice(0, 2).toUpperCase(),
+                  role: mem.isHost ? 'Host' : 'Stage Member',
+                  color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+                  isSpeaking: false,
+                  socketId: mem.peerId,
+                  id: mem.userId,
+                  isHost: mem.isHost,
+                }
+              ];
+            });
+
+            // Connect DataConnection to member if not already connected
+            if (!dataConnsRef.current.has(mem.peerId) && peerRef.current) {
+              try {
+                const c2 = peerRef.current.connect(mem.peerId);
+                if (c2) {
+                  dataConnsRef.current.set(mem.peerId, c2);
+                  setupDataConnection(c2, false);
+                }
+              } catch {}
+            }
+
+            // Initiate audio call if our peer ID is lexicographically greater (avoids duplicate calls)
+            if (myPeerIdRef.current > mem.peerId) {
+              setTimeout(() => {
+                initiateAudioCall(mem.peerId);
+              }, 400);
+            }
+          }
+        });
+      }
+
+      // 5. Guest receives notification about another new peer joining
+      else if (data.type === 'PEER_JOINED' && data.peer) {
+        const mem = data.peer;
+        if (mem.userName !== effectiveUserName && mem.peerId !== myPeerIdRef.current) {
+          roomMembersRef.current.set(mem.peerId, mem);
+
+          setPeerParticipants(prev => {
+            if (prev.some(p => p.socketId === mem.peerId || p.name === mem.userName)) return prev;
+            return [
+              ...prev,
+              {
+                name: mem.userName,
+                initials: mem.userName.slice(0, 2).toUpperCase(),
+                role: 'Stage Member',
+                color: 'linear-gradient(135deg,#74d6c8,#5488ff)',
+                isSpeaking: false,
+                socketId: mem.peerId,
+                id: mem.userId,
+              }
+            ];
+          });
+
+          showToast(`👋 ${mem.userName} joined the stage!`);
+
+          // Connect DataConnection to new peer
+          if (!dataConnsRef.current.has(mem.peerId) && peerRef.current) {
+            try {
+              const c2 = peerRef.current.connect(mem.peerId);
+              if (c2) {
+                dataConnsRef.current.set(mem.peerId, c2);
+                setupDataConnection(c2, false);
+              }
+            } catch {}
+          }
+
+          // Call new peer if our ID is greater
+          if (myPeerIdRef.current > mem.peerId) {
+            setTimeout(() => {
+              initiateAudioCall(mem.peerId);
+            }, 500);
+          }
         }
       }
     });
 
     conn.on('close', () => {
       dataConnsRef.current.delete(conn.peer);
+      activeCallsRef.current.delete(conn.peer);
+      roomMembersRef.current.delete(conn.peer);
+
       const audio = remoteAudioElementsRef.current.get(conn.peer);
       if (audio) {
         audio.srcObject = null;
@@ -573,49 +796,9 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       }
       setPeerParticipants(prev => prev.filter(p => p.socketId !== conn.peer && p.id !== conn.peer));
     });
-  }, [effectiveUserName]);
+  }, [effectiveUserName, initiateAudioCall]);
 
-  // Connect to Host Peer (when joining as guest)
-  const connectToHostPeer = useCallback((hostPeerId: string) => {
-    const peer = peerRef.current;
-    if (!peer || peer.destroyed) return;
-
-    // Call host with local microphone stream
-    const localStream = mediaStreamRef.current;
-    if (localStream) {
-      try {
-        const call = peer.call(hostPeerId, localStream);
-        if (call) {
-          activeCallsRef.current.set(hostPeerId, call);
-          call.on('stream', (remoteStream: MediaStream) => {
-            attachRemoteAudio(hostPeerId, remoteStream);
-          });
-        }
-      } catch (e) {
-        console.warn('PeerJS call host error:', e);
-      }
-    }
-
-    // Connect data channel for live text chat & presence
-    try {
-      const conn = peer.connect(hostPeerId);
-      if (conn) {
-        setupDataConnection(conn);
-        conn.on('open', () => {
-          dataConnsRef.current.set(hostPeerId, conn);
-          conn.send({
-            type: 'JOIN',
-            userId: effectiveUserId,
-            userName: effectiveUserName,
-          });
-        });
-      }
-    } catch (e) {
-      console.warn('PeerJS data connect host error:', e);
-    }
-  }, [attachRemoteAudio, setupDataConnection, effectiveUserId, effectiveUserName]);
-
-  // Initialize PeerJS for Room
+  // Initialize PeerJS for Room with Full Group Mesh
   const initPeerJS = useCallback((roomId: string, isHostRole: boolean) => {
     const PeerConstructor = (window as any).Peer;
     if (!PeerConstructor) {
@@ -628,11 +811,25 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       peerRef.current = null;
     }
 
+    dataConnsRef.current.clear();
+    activeCallsRef.current.clear();
+    roomMembersRef.current.clear();
+
     const cleanRoomId = roomId.replace(/[^a-zA-Z0-9_-]/g, '_');
     const myPeerId = isHostRole
       ? `techai_${cleanRoomId}_host`
-      : `techai_${cleanRoomId}_peer_${Math.random().toString(36).substring(2, 7)}`;
+      : `techai_${cleanRoomId}_guest_${Math.random().toString(36).substring(2, 7)}`;
     const hostPeerId = `techai_${cleanRoomId}_host`;
+    myPeerIdRef.current = myPeerId;
+
+    if (isHostRole) {
+      roomMembersRef.current.set(myPeerId, {
+        peerId: myPeerId,
+        userName: effectiveUserName,
+        userId: effectiveUserId,
+        isHost: true,
+      });
+    }
 
     try {
       const peer = new PeerConstructor(myPeerId, {
@@ -647,37 +844,61 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
       });
       peerRef.current = peer;
 
-      peer.on('open', (id: string) => {
+      peer.on('open', async (id: string) => {
         console.log('PeerJS node active with ID:', id);
         setConnectionStatus('connected');
 
+        // Pre-warm local stream so incoming or outgoing calls have audio immediately
+        await ensureLocalStream();
+
+        // If guest, connect to host immediately
         if (!isHostRole) {
           setTimeout(() => {
-            connectToHostPeer(hostPeerId);
-          }, 600);
+            try {
+              const conn = peer.connect(hostPeerId);
+              if (conn) {
+                setupDataConnection(conn, false);
+                conn.on('open', () => {
+                  dataConnsRef.current.set(hostPeerId, conn);
+                  conn.send({
+                    type: 'JOIN',
+                    peerId: myPeerId,
+                    userId: effectiveUserId,
+                    userName: effectiveUserName,
+                  });
+                });
+              }
+            } catch (e) {
+              console.warn('Guest connect host error:', e);
+            }
+          }, 400);
         }
       });
 
-      // Handle incoming voice call from peer
-      peer.on('call', (call: any) => {
+      // Handle incoming voice call from any peer
+      peer.on('call', async (call: any) => {
         activeCallsRef.current.set(call.peer, call);
-        const localStream = mediaStreamRef.current;
+        const localStream = await ensureLocalStream();
         call.answer(localStream);
         call.on('stream', (remoteStream: MediaStream) => {
-          attachRemoteAudio(call.peer, remoteStream);
+          playRemoteAudio(call.peer, remoteStream);
+        });
+        call.on('close', () => {
+          activeCallsRef.current.delete(call.peer);
         });
       });
 
       // Handle incoming data connection
       peer.on('connection', (conn: any) => {
         dataConnsRef.current.set(conn.peer, conn);
-        setupDataConnection(conn);
+        setupDataConnection(conn, isHostRole);
       });
 
       peer.on('error', (err: any) => {
         console.warn('PeerJS event:', err.type, err.message);
         if (err.type === 'unavailable-id' && isHostRole) {
           const fallbackId = `techai_${cleanRoomId}_host_${Math.random().toString(36).substring(2, 5)}`;
+          myPeerIdRef.current = fallbackId;
           try {
             const p2 = new PeerConstructor(fallbackId, {
               config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
@@ -689,7 +910,7 @@ export function VoiceRoom({ userName = 'Student', userPhoto, onProgress }: Voice
     } catch (e) {
       console.warn('PeerJS init failed:', e);
     }
-  }, [connectToHostPeer, attachRemoteAudio, setupDataConnection]);
+  }, [effectiveUserId, effectiveUserName, ensureLocalStream, playRemoteAudio, setupDataConnection]);
 
   // Create or retrieve an RTCPeerConnection for a peer
   const createPeerConnection = useCallback((targetSocketId: string) => {
