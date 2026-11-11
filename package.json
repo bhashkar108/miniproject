@@ -11,7 +11,9 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "start": "pnpm --filter @workspace/api-server start",
-    "preview": "pnpm --filter @workspace/tech-ai serve"
+    "preview": "pnpm --filter @workspace/tech-ai serve",
+    "db:studio": "pnpm --filter @workspace/db exec drizzle-kit studio",
+    "db:push": "pnpm --filter @workspace/db exec drizzle-kit push"
   },
   "private": true,
   "pnpm": {
