@@ -631,6 +631,14 @@ function AppContent() {
       const activeUser = { id: Date.now(), name: authName.trim() || authEmail.split('@')[0], email: authEmail.trim().toLowerCase() };
       try { localStorage.setItem('techai-student-session', JSON.stringify(activeUser)); } catch {}
       await queryClient.invalidateQueries({ queryKey: getGetCurrentSessionQueryKey() });
+      const currentDraft = { ...profileDraft };
+      if (currentDraft.roll || currentDraft.college || currentDraft.branch || currentDraft.phone) {
+        try {
+          const { updatedAt: _u, ...draftData } = currentDraft;
+          await updateProfile.mutateAsync({ data: draftData });
+          queryClient.invalidateQueries({ queryKey: getGetStudentProfileQueryKey() });
+        } catch {}
+      }
       setPath('/');
       setMessage('Welcome to your Tech AI student workspace!');
     } catch(e) {
@@ -652,7 +660,9 @@ function AppContent() {
   const handleSignOut = () => { try { localStorage.removeItem('techai-student-session'); } catch {} logout.mutate(undefined,{onSuccess:()=>{ queryClient.setQueryData(getGetCurrentSessionQueryKey(),null); setPath('/'); },onError:()=>{ queryClient.setQueryData(getGetCurrentSessionQueryKey(),null); setPath('/'); }}); };
   const saveProfile = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if(!session.data){try{localStorage.setItem('techai-guest-profile',JSON.stringify(profileDraft));setMessage('Profile saved on this device.');}catch{setMessage('Could not save this profile on your device.');}return;}
+    const {updatedAt: _u, ...currentData} = profileDraft;
+try{localStorage.setItem('techai-guest-profile',JSON.stringify(profileDraft));if(session.data?.id){localStorage.setItem('techai-saved-profile-'+session.data.id,JSON.stringify(currentData));}}catch{}
+if(!session.data){setMessage('Profile saved on this device. Sign in to sync with your database!');return;}
     const {updatedAt: _updatedAt, ...data} = profileDraft;
     updateProfile.mutate({data}, {
       onSuccess: (saved) => {
