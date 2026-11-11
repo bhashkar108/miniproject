@@ -102,8 +102,8 @@ const navItems: { id: Module; label: string; icon: typeof House }[] = [
   { id: 'voice', label: 'English Practice', icon: Mic }, { id: 'voiceroom', label: 'Voice Rooms', icon: Radio }, { id: 'docs', label: 'Smart Doc', icon: WandSparkles },
   { id: 'equations', label: 'Equation graph', icon: Sigma }, { id: 'quiz', label: 'Auto Quiz', icon: Brain }, { id: 'progress', label:'Progress', icon:Activity }, { id: 'profile', label: 'My profile', icon: UserRound },
 ];
-const profileFields: (keyof StudentProfile)[] = ['name', 'email', 'college', 'course', 'semester', 'subject', 'roll', 'phone'];
-const profileLabels: Record<string,string> = { name:'Full name', email:'Email address', college:'College or institute', course:'Course', semester:'Semester', subject:'Subject', roll:'Student / roll number', phone:'Phone' };
+const profileFields: (keyof StudentProfile)[] = ['name', 'email', 'college', 'course', 'semester', 'branch', 'roll', 'phone'];
+const profileLabels: Record<string,string> = { name:'Full name', email:'Email address', college:'College or institute', course:'Course', semester:'Semester', branch:'Branch', roll:'Student / roll number', phone:'Phone' };
 const blankProfile: StudentProfile = { name:'', roll:'', father:'', mother:'', village:'', district:'', college:'', section:'', branch:'', course:'', subject:'', email:'', phone:'', dateOfBirth:'', gender:'', address:'', state:'', postalCode:'', country:'', nationality:'', guardianName:'', guardianRelationship:'', guardianPhone:'', admissionNumber:'', semester:'', academicYear:'', profilePhoto:'', updatedAt:'' };
 
 function evaluateSafeEquation(expression: string, x: number): number {
