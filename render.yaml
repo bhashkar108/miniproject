@@ -7,8 +7,7 @@ services:
     plan: free
     rootDir: .
     buildCommand: |
-      npm install -g pnpm &&
-      pnpm install --frozen-lockfile &&
+      npx pnpm install --no-frozen-lockfile &&
       cd artifacts/api-server &&
       node ./build.mjs
     startCommand: node artifacts/api-server/dist/index.mjs
