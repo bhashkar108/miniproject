@@ -8,7 +8,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://techai-api-server.onrender.com/api/$1"
+      "destination": "https://miniproject-gg1x.onrender.com/api/$1"
     },
     {
       "source": "/(.*)",

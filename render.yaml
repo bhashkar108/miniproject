@@ -45,7 +45,7 @@ services:
     routes:
       - type: rewrite
         source: /api/*
-        destination: https://techai-api-server.onrender.com/api/*
+        destination: https://miniproject-gg1x.onrender.com/api/*
       - type: rewrite
         source: /*
         destination: /index.html
