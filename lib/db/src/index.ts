@@ -4,15 +4,21 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-const connectionString = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/tech_ai";
+const defaultNeonUrl =
+  "postgresql://neondb_owner:npg_axW5TCzwMo8k@ep-crimson-boat-aof0q2mv-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
 
-if (!process.env.DATABASE_URL) {
-  console.warn(
-    "[Warning] DATABASE_URL is not set. Defaulting to local postgresql connection. For persistent user accounts, set DATABASE_URL.",
-  );
-}
+const connectionString = (process.env.DATABASE_URL || defaultNeonUrl).trim();
 
-export const pool = new Pool({ connectionString });
+const isRemote =
+  connectionString.includes("neon.tech") ||
+  connectionString.includes("sslmode=require") ||
+  connectionString.includes(".render.com") ||
+  connectionString.includes(".supabase.co");
+
+export const pool = new Pool({
+  connectionString,
+  ssl: isRemote ? { rejectUnauthorized: false } : undefined,
+});
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";

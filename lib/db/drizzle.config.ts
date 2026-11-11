@@ -4,7 +4,7 @@ import fs from "fs";
 
 function resolveDatabaseUrl(): string {
   if (process.env.DATABASE_URL) {
-    return process.env.DATABASE_URL;
+    return process.env.DATABASE_URL.trim();
   }
 
   // Look for .env file in root or current dir
@@ -31,8 +31,8 @@ function resolveDatabaseUrl(): string {
     }
   }
 
-  // Default local PostgreSQL fallback
-  return "postgresql://postgres:postgres@localhost:5432/tech_ai";
+  // Default fallback with Neon cloud database
+  return "postgresql://neondb_owner:npg_axW5TCzwMo8k@ep-crimson-boat-aof0q2mv-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
 }
 
 const connectionUrl = resolveDatabaseUrl();
@@ -44,4 +44,3 @@ export default defineConfig({
     url: connectionUrl,
   },
 });
-
