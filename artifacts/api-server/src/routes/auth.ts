@@ -1,4 +1,5 @@
-import argon2 from "argon2";
+import { scrypt, randomBytes, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, studentProfilesTable } from "@workspace/db";
@@ -18,6 +19,25 @@ import {
   type AuthenticatedRequest,
 } from "../lib/auth";
 
+// ---------- Password hashing (pure Node.js crypto — no native modules) ----------
+const scryptAsync = promisify(scrypt);
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${salt}:${derivedKey.toString("hex")}`;
+}
+
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  const [salt, key] = storedHash.split(":");
+  if (!salt || !key) return false;
+  const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+  const keyBuffer = Buffer.from(key, "hex");
+  if (derivedKey.length !== keyBuffer.length) return false;
+  return timingSafeEqual(derivedKey, keyBuffer);
+}
+
+// ---------- Router ----------
 const router: IRouter = Router();
 
 // In-memory fallback user store (ensures login/sign-in works 100% reliably even if DB is offline or asleep)
@@ -92,7 +112,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
       return;
     }
 
-    const passwordHash = await argon2.hash(parsed.data.password, { type: argon2.argon2id });
+    const passwordHash = await hashPassword(parsed.data.password);
     const [user] = await db
       .insert(usersTable)
       .values({ name, email, passwordHash })
@@ -112,7 +132,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     return;
   } catch {
     // Database unreachable, register in high-reliability memory store
-    const passwordHash = await argon2.hash(parsed.data.password, { type: argon2.argon2id });
+    const passwordHash = await hashPassword(parsed.data.password);
     const mUser: MemoryUser = {
       id: ++memoryUserCounter,
       name,
@@ -144,7 +164,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       .where(eq(usersTable.email, email))
       .limit(1);
 
-    if (user && (await argon2.verify(user.passwordHash, parsed.data.password))) {
+    if (user && (await verifyPassword(parsed.data.password, user.passwordHash))) {
       const token = await createSessionToken(user.id);
       res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
       res.json(LoginStudentResponse.parse(getSessionUser(user)));
@@ -156,7 +176,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   // Check memory store
   const mUser = memoryUsers.get(email);
-  if (mUser && (await argon2.verify(mUser.passwordHash, parsed.data.password))) {
+  if (mUser && (await verifyPassword(parsed.data.password, mUser.passwordHash))) {
     const token = await createSessionToken(mUser.id);
     res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
     res.json(LoginStudentResponse.parse(getSessionUser(mUser)));
