@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-const rawPort = process.env.PORT;
+const rawPort = process.env.CLIENT_PORT || (process.env.NODE_ENV === 'production' ? process.env.PORT : undefined);
 const port = (rawPort && !Number.isNaN(Number(rawPort)) && Number(rawPort) > 0) ? Number(rawPort) : 5173;
 const basePath = process.env.BASE_PATH || '/';
 
