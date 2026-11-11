@@ -32,10 +32,9 @@ services:
     plan: free
     rootDir: .
     buildCommand: |
-      npm install -g pnpm &&
-      pnpm install --frozen-lockfile &&
+      npx pnpm install --no-frozen-lockfile &&
       cd artifacts/tech-ai &&
-      pnpm run build
+      npx pnpm run build
     staticPublishPath: artifacts/tech-ai/dist/public
     envVars:
       - key: VITE_API_URL

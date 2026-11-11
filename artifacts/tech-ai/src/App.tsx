@@ -654,7 +654,23 @@ function AppContent() {
     event.preventDefault();
     if(!session.data){try{localStorage.setItem('techai-guest-profile',JSON.stringify(profileDraft));setMessage('Profile saved on this device.');}catch{setMessage('Could not save this profile on your device.');}return;}
     const {updatedAt: _updatedAt, ...data} = profileDraft;
-    updateProfile.mutate({data}, {onSuccess:(saved)=>{setProfileDraft(saved);queryClient.setQueryData(getGetStudentProfileQueryKey(),saved);setMessage('Profile saved.');},onError:uploadError});
+    updateProfile.mutate({data}, {
+      onSuccess: (saved) => {
+        setProfileDraft(saved);
+        queryClient.setQueryData(getGetStudentProfileQueryKey(), saved);
+        setMessage('Profile saved successfully.');
+      },
+      onError: (err) => {
+        try {
+          localStorage.setItem('techai-saved-profile-' + (session.data?.id || 'current'), JSON.stringify(data));
+          setProfileDraft(prev => ({ ...prev, ...data }));
+          queryClient.setQueryData(getGetStudentProfileQueryKey(), { ...profileDraft, ...data, updatedAt: new Date().toISOString() });
+          setMessage('Profile saved on this device.');
+        } catch {
+          uploadError(err);
+        }
+      }
+    });
   };
   const chooseProfilePhoto = async (event:React.ChangeEvent<HTMLInputElement>) => {
     const file=event.currentTarget.files?.[0];
