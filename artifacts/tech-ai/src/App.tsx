@@ -641,18 +641,18 @@ function AppContent() {
       }
       setPath('/');
       setMessage('Welcome to your Tech AI student workspace!');
-    } catch(e) {
-      // In case server is unreachable or static deployment, authenticate locally so student is NEVER blocked!
-      const fallbackUser = {
-        id: Date.now(),
-        name: authName.trim() || authEmail.split('@')[0] || 'Student',
-        email: authEmail.trim().toLowerCase(),
-      };
-      try { localStorage.setItem('techai-student-session', JSON.stringify(fallbackUser)); } catch {}
-      queryClient.setQueryData(getGetCurrentSessionQueryKey(), fallbackUser);
-      setProfileDraft(prev => ({ ...prev, name: fallbackUser.name, email: fallbackUser.email }));
-      setMessage(`Welcome, ${fallbackUser.name}! Signed in to your workspace.`);
-      setPath('/');
+    } catch(e: any) {
+      const serverError = e?.data?.error || e?.message || '';
+      if (serverError.toLowerCase().includes('already exists')) {
+        setSessionError('An account with this email already exists. Please Sign In instead.');
+      } else if (serverError.toLowerCase().includes('incorrect')) {
+        setSessionError('Email or password is incorrect. Please check your credentials.');
+      } else if (serverError) {
+        setSessionError(serverError);
+      } else {
+        setSessionError('Server is waking up from sleep. Please wait 10 seconds and try again!');
+      }
+    } 
     } finally {
       setAuthBusy(false);
     }
@@ -1386,6 +1386,12 @@ if(!session.data){setMessage('Profile saved on this device. Sign in to sync with
               </div>
               <div className="profile-status"><ShieldCheck size={15}/>{session.data?t('Your information stays attached to your account'):'Profile stays private on this device. Create an account only if you want to sync it.'}</div>
             </div>
+            {!session.data && (
+              <div className="alert-guest-sync" style={{ padding: '12px 16px', background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.3)', borderRadius: '10px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '13.5px', color: '#fef08a' }}>⚠️ <b>Guest Mode:</b> Cloud database me profile save karne ke liye pehle Sign in / Create Account karein.</span>
+                <Link href="/login" className="button button-small button-primary">Sign In / Register</Link>
+              </div>
+            )}
             <form className="panel profile-form" onSubmit={saveProfile}>
               <div className="panel-heading"><div><h2>{t('Profile details')}</h2><p>Essential student information for your account and workspace.</p></div><span className="eyebrow">{t('PRIVATE')}</span></div>
               {profileQuery.isLoading?<InlineLoading label={t('Loading your profile')}/>:<>
