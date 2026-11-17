@@ -164,10 +164,51 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       .where(eq(usersTable.email, email))
       .limit(1);
 
-    if (user && (await verifyPassword(parsed.data.password, user.passwordHash))) {
-      const token = await createSessionToken(user.id);
+    if (user) {
+      if (await verifyPassword(parsed.data.password, user.passwordHash)) {
+        const token = await createSessionToken(user.id);
+        res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
+        res.json(LoginStudentResponse.parse(getSessionUser(user)));
+        return;
+      }
+      res.status(401).json({ error: "Password is incorrect for this email." });
+      return;
+    }
+
+    // Auto-create user if they used Sign In without registering first
+    const autoName = email.split('@')[0].replace(/[0-9._]/g, ' ').trim() || 'Student';
+    const passwordHash = await hashPassword(parsed.data.password);
+    const [newUser] = await db
+      .insert(usersTable)
+      .values({
+        name: autoName,
+        email,
+        passwordHash,
+      })
+      .returning();
+
+    if (newUser) {
+      try {
+        await db
+          .insert(studentProfilesTable)
+          .values({
+            userId: newUser.id,
+            name: newUser.name,
+            email: newUser.email,
+            roll: "",
+            college: "",
+            branch: "",
+            course: "",
+            phone: "",
+            semester: "",
+            profilePhoto: "",
+          })
+          .onConflictDoNothing();
+      } catch {}
+
+      const token = await createSessionToken(newUser.id);
       res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
-      res.json(LoginStudentResponse.parse(getSessionUser(user)));
+      res.json(LoginStudentResponse.parse(getSessionUser(newUser)));
       return;
     }
   } catch {
@@ -176,14 +217,31 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   // Check memory store
   const mUser = memoryUsers.get(email);
-  if (mUser && (await verifyPassword(parsed.data.password, mUser.passwordHash))) {
-    const token = await createSessionToken(mUser.id);
-    res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
-    res.json(LoginStudentResponse.parse(getSessionUser(mUser)));
+  if (mUser) {
+    if (await verifyPassword(parsed.data.password, mUser.passwordHash)) {
+      const token = await createSessionToken(mUser.id);
+      res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
+      res.json(LoginStudentResponse.parse(getSessionUser(mUser)));
+      return;
+    }
+    res.status(401).json({ error: "Password is incorrect for this email." });
     return;
   }
 
-  res.status(401).json({ error: "Email or password is incorrect." });
+  // Memory auto-create
+  const autoName = email.split('@')[0].replace(/[0-9._]/g, ' ').trim() || 'Student';
+  const passwordHash = await hashPassword(parsed.data.password);
+  const newMUser = {
+    id: Date.now(),
+    name: autoName,
+    email,
+    passwordHash,
+    createdAt: new Date(),
+  };
+  memoryUsers.set(email, newMUser);
+  const token = await createSessionToken(newMUser.id);
+  res.cookie(SESSION_COOKIE, token, sessionCookieOptions);
+  res.json(LoginStudentResponse.parse(getSessionUser(newMUser)));
 });
 
 router.post("/auth/logout", async (_req, res): Promise<void> => {
